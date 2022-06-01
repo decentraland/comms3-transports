@@ -1,6 +1,10 @@
 import expect from 'expect'
 import { RTCPeerConnection } from 'wrtc'
 
+import { TextEncoder, TextDecoder } from 'util'
+global.TextEncoder = TextEncoder
+global.TextDecoder = TextDecoder
+
 window.RTCPeerConnection = RTCPeerConnection
 
 import { P2PTransport } from '../../src/p2p/PeerToPeerTransport'

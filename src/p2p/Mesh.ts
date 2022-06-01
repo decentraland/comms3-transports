@@ -1,5 +1,4 @@
 import { ILogger, BFFConnection, TopicListener } from '../types'
-import { TextEncoder, TextDecoder } from 'util'
 
 export const defaultIceServers = [
   { urls: 'stun:stun.l.google.com:19302' },
