@@ -7,13 +7,13 @@
   "scripts": {},
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/well-known-components/base-component.git"
+    "url": "git+https://github.com/decentraland/comms3-transports.git"
   },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/well-known-components/base-component/issues"
+    "url": "https://github.com/decentraland/comms3-transports/issues"
   },
   "prettier": {
     "printWidth": 120,
@@ -22,7 +22,7 @@
     "trailingComma": "none",
     "tabWidth": 2
   },
-  "homepage": "https://github.com/well-known-components/base-component#readme",
+  "homepage": "https://github.com/decentraland/comms3-transports#readme",
   "devDependencies": {
     "@dcl/eslint-config": "^1.0.4",
     "@microsoft/api-extractor": "^7.17.0",
