@@ -28,7 +28,7 @@ jobs:
           node-version: 14.x
           cache: npm
       - name: install
-        run: make install
+        run: npm ci
       - name: lint
         run: make lint
 
