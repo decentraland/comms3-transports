@@ -55,12 +55,42 @@ describe('p2p', () => {
     )
   }
 
-  it('initial peers are added as known peers', async () => {
+  function createJoinIslandMessage(peerId: string): Uint8Array {
+    return JoinIslandMessage.encode({
+      islandId,
+      peerId
+    }).finish()
+  }
+
+  it('smoke test', async () => {
     const bff = new InMemoryBFF()
 
-    const peers = new Map<string, Position3D>()
-    peers.set('peer2', [0, 0, 0])
     const t1 = createP2PTransport('peer1', bff)
-    expect(t1.isKnownPeer('peer2'))
+    await t1.connect()
+
+    const peers = new Map<string, Position3D>()
+    peers.set('peer1', [0, 0, 0])
+    const t2 = createP2PTransport('peer2', bff, peers)
+    await t2.connect()
+
+    bff.publishSystemTopic(`island.${islandId}.peer_join`, createJoinIslandMessage('peer2'))
+
+    await delay(1000)
+
+    expect(t1.mesh.isConnectedTo(t2.peerId)).toBeTruthy()
+    expect(t2.mesh.isConnectedTo(t1.peerId)).toBeTruthy()
+
+    t1.send(new Uint8Array(), { reliable: true })
+    await new Promise((resolve) => {
+      t2.onMessageObservable.add(({ peer, payload }: TransportMessage) => {
+        console.log(`got message from ${peer}`, payload)
+        resolve(null)
+      })
+    })
+
+    await t1.disconnect()
+    await t2.disconnect()
+
+    await delay(1000)
   })
 })

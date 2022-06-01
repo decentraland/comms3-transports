@@ -239,6 +239,10 @@ export class P2PTransport extends Transport {
     }
   }
 
+  isKnownPeer(peerId: string) {
+    return this.knownPeers[peerId]!!
+  }
+
   private handlePeerPacket(data: Uint8Array, peerId: string) {
     if (this.disposed) return
     try {
