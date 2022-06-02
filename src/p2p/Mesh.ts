@@ -215,6 +215,7 @@ export class Mesh {
   private async onOfferMessage(data: Uint8Array, peerId: string) {
     if (!this.isKnownPeer(peerId)) {
       this.logger.log(`Reject offer from unkown peer ${peerId}`)
+      return
     }
 
     this.debugWebRtc(`Got offer message from ${peerId}`)

@@ -83,7 +83,7 @@ export class P2PTransport extends Transport {
     this.mesh = new Mesh(this.bffConnection, this.peerId, {
       logger: this.logger,
       packetHandler: this.handlePeerPacket.bind(this),
-      isKnownPeer: (peerId: string) => !!this.knownPeers[peerId],
+      isKnownPeer: this.isKnownPeer.bind(this),
       debugWebRtcEnabled: this.config.debugWebRtcEnabled ?? false
     })
 

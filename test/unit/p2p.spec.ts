@@ -1,24 +1,12 @@
 import expect from 'expect'
-import { RTCPeerConnection } from 'wrtc'
 
-import { TextEncoder, TextDecoder } from 'util'
-global.TextEncoder = TextEncoder
-global.TextDecoder = TextDecoder
+import { InMemoryBFF, InMemoryBFFClient } from '../helpers/bff'
+import { registerGlobals } from '../helpers/globals'
 
-window.RTCPeerConnection = RTCPeerConnection
+registerGlobals()
 
 import { P2PTransport } from '../../src/p2p/PeerToPeerTransport'
-import { TransportMessage } from '../../src/Transport'
 import { Position3D } from '../../src/types'
-import { InMemoryBFF, InMemoryBFFClient } from '../bff'
-import { JoinIslandMessage } from '../../src/proto/archipelago'
-
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-// SEE https://github.com/node-webrtc/node-webrtc/issues/636
-process.on('beforeExit', (code) => process.exit(code))
 
 describe('p2p', () => {
   const islandId = 'I1'
@@ -49,7 +37,7 @@ describe('p2p', () => {
       {
         selfPosition: () => [0, 0, 0],
         verbose: false,
-        debugWebRtcEnabled: false,
+        debugWebRtcEnabled: true,
         bff: new InMemoryBFFClient(peerId, bff),
         logger,
         peerId,
@@ -66,5 +54,20 @@ describe('p2p', () => {
     peers.set('peer2', [0, 0, 0])
     const t1 = createP2PTransport('peer1', bff)
     expect(t1.isKnownPeer('peer2'))
+  })
+
+  it('offer should be rejected if peer is unknown', async () => {
+    const bff = new InMemoryBFF()
+
+    const peers = new Map<string, Position3D>()
+    peers.set('peer2', [0, 0, 0])
+    const t1 = createP2PTransport('peer1', bff)
+    await t1.connect()
+
+    bff.publishToTopic('peer2', 'peer1.offer', new Uint8Array())
+
+    expect(t1.mesh.hasConnectionsFor('peer2')).toBeFalsy()
+
+    await t1.disconnect()
   })
 })

@@ -1,4 +1,4 @@
-import { TopicListener } from "../src/types"
+import { TopicListener } from '../../src/types'
 
 export type TestTopicListener = {
   peerId: string
@@ -13,13 +13,13 @@ export class InMemoryBFF {
 
   async publishSystemTopic(topic: string, payload: Uint8Array): Promise<void> {
     this.listeners.forEach((l) => {
-      const sPattern = l.pattern.split(".")
-      const sTopic = topic.split(".")
+      const sPattern = l.pattern.split('.')
+      const sTopic = topic.split('.')
       if (sPattern.length !== sTopic.length) {
         return
       }
       for (let i = 0; i < sTopic.length; i++) {
-        if (sPattern[i] !== "*" && sPattern[i] !== sTopic[i]) {
+        if (sPattern[i] !== '*' && sPattern[i] !== sTopic[i]) {
           return
         }
       }
@@ -29,13 +29,13 @@ export class InMemoryBFF {
 
   async publishToTopic(peerId: string, topic: string, payload: Uint8Array): Promise<void> {
     this.listeners.forEach((l) => {
-      const sPattern = l.pattern.split(".")
-      const sTopic = topic.split(".")
+      const sPattern = l.pattern.split('.')
+      const sTopic = topic.split('.')
       if (sPattern.length !== sTopic.length) {
         return
       }
       for (let i = 0; i < sTopic.length; i++) {
-        if (sPattern[i] !== "*" && sPattern[i] !== sTopic[i]) {
+        if (sPattern[i] !== '*' && sPattern[i] !== sTopic[i]) {
           return
         }
       }
@@ -51,7 +51,7 @@ export class InMemoryBFF {
     const l = {
       peerId,
       pattern: topic,
-      peerHandler: handler,
+      peerHandler: handler
     }
     this.listeners.add(l)
     return l
@@ -65,7 +65,7 @@ export class InMemoryBFF {
     const l = {
       peerId,
       pattern: topic,
-      systemHandler: handler,
+      systemHandler: handler
     }
     this.listeners.add(l)
     return l

@@ -1,20 +1,19 @@
 import expect from 'expect'
-import { RTCPeerConnection } from 'wrtc'
 
-window.RTCPeerConnection = RTCPeerConnection
+import { delay } from '../helpers/delay'
+import { InMemoryBFF, InMemoryBFFClient } from '../helpers/bff'
+import { registerGlobals, registerWebRTCGlobals } from '../helpers/globals'
+
+registerGlobals()
+registerWebRTCGlobals()
 
 import { P2PTransport } from '../../src/p2p/PeerToPeerTransport'
 import { TransportMessage } from '../../src/Transport'
 import { Position3D } from '../../src/types'
-import { InMemoryBFF, InMemoryBFFClient } from '../bff'
 import { JoinIslandMessage } from '../../src/proto/archipelago'
 
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
 // SEE https://github.com/node-webrtc/node-webrtc/issues/636
-process.on('beforeExit', (code) => process.exit(code))
+// process.on('beforeExit', (code) => process.exit(code))
 
 describe('p2p', () => {
   const islandId = 'I1'
@@ -63,6 +62,9 @@ describe('p2p', () => {
   }
 
   it('smoke test', async () => {
+    const data = 'hello'
+    const encoder = new TextEncoder()
+    const decoder = new TextDecoder()
     const bff = new InMemoryBFF()
 
     const t1 = createP2PTransport('peer1', bff)
@@ -75,22 +77,27 @@ describe('p2p', () => {
 
     bff.publishSystemTopic(`island.${islandId}.peer_join`, createJoinIslandMessage('peer2'))
 
-    await delay(1000)
+    await delay(100)
 
-    expect(t1.mesh.isConnectedTo(t2.peerId)).toBeTruthy()
-    expect(t2.mesh.isConnectedTo(t1.peerId)).toBeTruthy()
-
-    t1.send(new Uint8Array(), { reliable: true })
-    await new Promise((resolve) => {
-      t2.onMessageObservable.add(({ peer, payload }: TransportMessage) => {
-        console.log(`got message from ${peer}`, payload)
-        resolve(null)
+    const p1 = new Promise((resolve) => {
+      t1.onMessageObservable.add(({ peer, payload }: TransportMessage) => {
+        resolve([peer, decoder.decode(payload)])
       })
     })
 
+    const p2 = new Promise((resolve) => {
+      t2.onMessageObservable.add(({ peer, payload }: TransportMessage) => {
+        resolve([peer, decoder.decode(payload)])
+      })
+    })
+
+    t1.send(encoder.encode(data), { reliable: true })
+    t2.send(encoder.encode(data), { reliable: false })
+
+    expect(await p1).toEqual(['peer2', data])
+    expect(await p2).toEqual(['peer1', data])
+
     await t1.disconnect()
     await t2.disconnect()
-
-    await delay(1000)
   })
 })

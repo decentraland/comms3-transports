@@ -6,3 +6,5 @@ coverage
 
 protoc3/
 src/proto/*.ts
+
+.env

@@ -41,8 +41,10 @@ build-proto: protoc3/bin/protoc
 test:
 	node_modules/.bin/jest --detectOpenHandles --colors --runInBand $(TESTARGS)
 
-test-all:
-	node_modules/.bin/jest --detectOpenHandles --colors --runInBand $(TESTARGS)
+test-integration:
+	node_modules/.bin/jest --config=jest-integration.config.js --detectOpenHandles --colors --runInBand $(TESTARGS)
+
+test-all: test test-integration 
 
 test-watch:
 	node_modules/.bin/jest --detectOpenHandles --colors --runInBand --watch $(TESTARGS)
