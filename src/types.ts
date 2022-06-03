@@ -1,3 +1,7 @@
+/**
+ * Position
+ * @public
+ */
 export type Position3D = [number, number, number]
 
 /**

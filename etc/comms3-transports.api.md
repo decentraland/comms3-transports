@@ -22,7 +22,7 @@ export class DummyTransport extends Transport {
     send(): Promise<void>;
 }
 
-// @public (undocumented)
+// @public
 export type Position3D = [number, number, number];
 
 // @public
