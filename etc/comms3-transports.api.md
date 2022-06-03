@@ -22,6 +22,9 @@ export class DummyTransport extends Transport {
     send(): Promise<void>;
 }
 
+// @public (undocumented)
+export type Position3D = [number, number, number];
+
 // @public
 export type SendOpts = {
     reliable: boolean;
@@ -38,8 +41,6 @@ export abstract class Transport {
     onDisconnectObservable: Observable<void>;
     // (undocumented)
     onMessageObservable: Observable<TransportMessage>;
-    // Warning: (ae-forgotten-export) The symbol "Position3D" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     onPeerPositionChange(_: string, __: Position3D): void;
     // (undocumented)
@@ -67,9 +68,9 @@ export type TransportsConfig = {
 
 // Warnings were encountered during analysis:
 //
-// src/index.ts:16:3 - (ae-forgotten-export) The symbol "ILogger" needs to be exported by the entry point index.d.ts
-// src/index.ts:17:3 - (ae-forgotten-export) The symbol "BFFConnection" needs to be exported by the entry point index.d.ts
-// src/index.ts:23:5 - (ae-forgotten-export) The symbol "RelaySuspensionConfig" needs to be exported by the entry point index.d.ts
+// src/index.ts:17:3 - (ae-forgotten-export) The symbol "ILogger" needs to be exported by the entry point index.d.ts
+// src/index.ts:18:3 - (ae-forgotten-export) The symbol "BFFConnection" needs to be exported by the entry point index.d.ts
+// src/index.ts:24:5 - (ae-forgotten-export) The symbol "RelaySuspensionConfig" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

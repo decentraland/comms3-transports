@@ -7,6 +7,7 @@ import { P2PTransport, RelaySuspensionConfig } from './p2p/PeerToPeerTransport'
 
 export * from './Transport'
 export * from './DummyTransport'
+export { Position3D } from './types'
 
 /**
  * Transports config
