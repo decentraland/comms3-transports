@@ -129,8 +129,6 @@ export class P2PTransport extends Transport {
         }
       }
     })
-
-    // globalThis.__DEBUG_PEER = this
   }
 
   onPeerPositionChange(peerId: string, p: Position3D) {
@@ -180,8 +178,6 @@ export class P2PTransport extends Transport {
       this.disconnectFrom(peerId)
       this.removeKnownPeer(peerId)
       this.triggerUpdateNetwork(`peer ${peerId} left island`)
-      // TODO
-      // removePeerByUUID(peerId)
     } else {
       this.logger.warn(`peer ${peerId} left ${peerLeftMessage.islandId}, but our current island is ${this.islandId}`)
     }
