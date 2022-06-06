@@ -18,6 +18,7 @@ export type LivekitConfig = {
 }
 
 export class LivekitTransport extends Transport {
+  private disconnected = false
   private room: Room
   private logger: ILogger
   private url: string
@@ -60,6 +61,11 @@ export class LivekitTransport extends Transport {
   }
 
   async disconnect() {
+    if (this.disconnected) {
+      return
+    }
+
+    this.disconnected = true
     this.room.disconnect()
     this.onDisconnectObservable.notifyObservers()
   }
