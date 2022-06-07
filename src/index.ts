@@ -18,7 +18,6 @@ export type TransportsConfig = {
   bff: BFFConnection
   selfPosition: () => Position3D | undefined
   peerId: string
-  verbose: boolean
   p2p: {
     verbose: boolean
     debugWebRtcEnabled: boolean
