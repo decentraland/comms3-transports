@@ -18,6 +18,7 @@ export type TransportsConfig = {
   bff: BFFConnection
   selfPosition: () => Position3D | undefined
   peerId: string
+  verbose: boolean
   p2p: {
     verbose: boolean
     debugWebRtcEnabled: boolean
@@ -34,8 +35,6 @@ export function createTransport(
   islandChangedMessage: IslandChangedMessage
 ): Transport | null {
   const connStr = islandChangedMessage.connStr
-  config.logger.info(`Got island change message: ${connStr}`)
-
   const { logger, peerId, bff } = config
 
   const islandId = islandChangedMessage.islandId
