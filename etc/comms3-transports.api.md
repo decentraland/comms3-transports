@@ -59,6 +59,7 @@ export type TransportsConfig = {
     bff: BFFConnection;
     selfPosition: () => Position3D | undefined;
     peerId: string;
+    verbose: boolean;
     p2p: {
         verbose: boolean;
         debugWebRtcEnabled: boolean;
@@ -70,7 +71,7 @@ export type TransportsConfig = {
 //
 // src/index.ts:17:3 - (ae-forgotten-export) The symbol "ILogger" needs to be exported by the entry point index.d.ts
 // src/index.ts:18:3 - (ae-forgotten-export) The symbol "BFFConnection" needs to be exported by the entry point index.d.ts
-// src/index.ts:24:5 - (ae-forgotten-export) The symbol "RelaySuspensionConfig" needs to be exported by the entry point index.d.ts
+// src/index.ts:25:5 - (ae-forgotten-export) The symbol "RelaySuspensionConfig" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
