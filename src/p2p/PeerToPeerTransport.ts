@@ -3,6 +3,7 @@ import { future } from 'fp-future'
 
 import { BFFConnection, TopicListener, Position3D, ILogger } from '../types'
 import { SendOpts, Transport } from '../Transport'
+import { StatisticsCollector } from '../statistics'
 import { JoinIslandMessage, LeftIslandMessage } from '../proto/archipelago'
 import { SuspendRelayData, PingData, PongData, Packet, MessageData } from '../proto/p2p'
 
@@ -51,6 +52,8 @@ const DEFAULT_MESSAGE_EXPIRATION_TIME = 10000
 export class P2PTransport extends Transport {
   public mesh: Mesh
   public peerId: string
+
+  private statisticsCollector: StatisticsCollector
   private islandId: string
   private logger: ILogger
   private bffConnection: BFFConnection
@@ -79,6 +82,7 @@ export class P2PTransport extends Transport {
     this.islandId = this.config.islandId
     this.bffConnection = this.config.bff
     this.config.verbose = this.config.verbose
+    this.statisticsCollector = new StatisticsCollector('p2p', this.peerId, this.islandId)
 
     this.mesh = new Mesh(this.bffConnection, this.peerId, {
       logger: this.logger,
@@ -129,6 +133,10 @@ export class P2PTransport extends Transport {
         }
       }
     })
+  }
+
+  collectStatistics() {
+    return this.statisticsCollector.collectStatistics()
   }
 
   onPeerPositionChange(peerId: string, p: Position3D) {
@@ -241,6 +249,7 @@ export class P2PTransport extends Transport {
 
   private handlePeerPacket(data: Uint8Array, peerId: string) {
     if (this.disposed) return
+    this.statisticsCollector.onBytesRecv(data.length)
     try {
       const packet = Packet.decode(Reader.create(new Uint8Array(data)))
 
@@ -671,6 +680,8 @@ export class P2PTransport extends Transport {
     if (this.isConnectedTo(peer)) {
       try {
         this.mesh.sendPacketToPeer(peer, d)
+
+        this.statisticsCollector.onBytesSent(d.length)
       } catch (e: any) {
         this.logger.warn(`Error sending data to peer ${peer} ${e.toString()}`)
       }

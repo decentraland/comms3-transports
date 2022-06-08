@@ -18,6 +18,9 @@ export type TransportsConfig = {
   bff: BFFConnection
   selfPosition: () => Position3D | undefined
   peerId: string
+  livekit: {
+    verbose: boolean
+  }
   p2p: {
     verbose: boolean
     debugWebRtcEnabled: boolean
@@ -43,7 +46,9 @@ export function createTransport(
     const url = connStr.substring('ws-room:'.length)
     transport = new WsTransport({
       logger,
-      url
+      url,
+      peerId,
+      islandId
     })
   } else if (connStr.startsWith('livekit:')) {
     const s = connStr.substring('livekit:'.length)
@@ -55,7 +60,10 @@ export function createTransport(
     transport = new LivekitTransport({
       logger,
       url,
-      token
+      token,
+      peerId,
+      islandId,
+      verbose: config.livekit.verbose
     })
   } else if (connStr.startsWith('p2p:')) {
     const peers = new Map<string, Position3D>()

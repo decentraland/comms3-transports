@@ -15,6 +15,15 @@ export function createTransport(config: TransportsConfig, islandChangedMessage: 
 // @public
 export class DummyTransport extends Transport {
     // (undocumented)
+    collectStatistics(): {
+        time: number;
+        transport: string;
+        peerId: string;
+        islandId: string;
+        bytesSent: number;
+        bytesRecv: number;
+    };
+    // (undocumented)
     connect(): Promise<void>;
     // (undocumented)
     disconnect(): Promise<void>;
@@ -33,6 +42,10 @@ export type SendOpts = {
 
 // @public
 export abstract class Transport {
+    // Warning: (ae-forgotten-export) The symbol "TransportStatistics" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    abstract collectStatistics(): TransportStatistics;
     // (undocumented)
     abstract connect(): Promise<void>;
     // (undocumented)
@@ -59,6 +72,9 @@ export type TransportsConfig = {
     bff: BFFConnection;
     selfPosition: () => Position3D | undefined;
     peerId: string;
+    livekit: {
+        verbose: boolean;
+    };
     p2p: {
         verbose: boolean;
         debugWebRtcEnabled: boolean;
@@ -70,7 +86,7 @@ export type TransportsConfig = {
 //
 // src/index.ts:17:3 - (ae-forgotten-export) The symbol "ILogger" needs to be exported by the entry point index.d.ts
 // src/index.ts:18:3 - (ae-forgotten-export) The symbol "BFFConnection" needs to be exported by the entry point index.d.ts
-// src/index.ts:24:5 - (ae-forgotten-export) The symbol "RelaySuspensionConfig" needs to be exported by the entry point index.d.ts
+// src/index.ts:27:5 - (ae-forgotten-export) The symbol "RelaySuspensionConfig" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

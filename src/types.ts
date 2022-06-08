@@ -1,4 +1,19 @@
 /**
+ * Transport Statistics
+ * @public
+ */
+export type TransportStatistics = {
+  time: number
+
+  transport: string
+  peerId: string
+  islandId: string
+
+  bytesSent: number
+  bytesRecv: number
+}
+
+/**
  * Position
  * @public
  */

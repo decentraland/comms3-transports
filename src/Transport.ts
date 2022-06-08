@@ -1,6 +1,6 @@
 import { Observable } from 'mz-observable'
 
-import { Position3D } from './types'
+import { Position3D, TransportStatistics } from './types'
 
 /**
  * A message from a transport
@@ -31,6 +31,7 @@ export abstract class Transport {
   public onDisconnectObservable = new Observable<void>()
   public onMessageObservable = new Observable<TransportMessage>()
 
+  abstract collectStatistics(): TransportStatistics
   abstract connect(): Promise<void>
   abstract send(msg: Uint8Array, opts: SendOpts): Promise<void>
   abstract disconnect(): Promise<void>
