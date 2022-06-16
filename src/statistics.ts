@@ -1,4 +1,5 @@
 import { TransportStatistics } from './types'
+
 export class StatisticsCollector {
   private bytesSent = 0
   private bytesRecv = 0
