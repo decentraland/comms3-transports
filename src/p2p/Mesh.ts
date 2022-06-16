@@ -169,7 +169,7 @@ export class Mesh {
     this.initiatedConnections.forEach((conn: Connection, peerId: string) => {
       const state = conn.instance.connectionState
       if (state !== 'connected' && Date.now() - conn.createTimestamp > PEER_CONNECT_TIMEOUT) {
-        this.logger.warn(`The connection to ${peerId} is not in a sane state ${state}. Discarding it.`)
+        this.logger.warn(`The connection ->${peerId} is not in a sane state ${state}. Discarding it.`)
         conn.instance.close()
         this.initiatedConnections.delete(peerId)
       }
@@ -177,7 +177,7 @@ export class Mesh {
     this.receivedConnections.forEach((conn: Connection, peerId: string) => {
       const state = conn.instance.connectionState
       if (state !== 'connected' && Date.now() - conn.createTimestamp > PEER_CONNECT_TIMEOUT) {
-        this.logger.warn(`The connection to ${peerId} is not in a sane state ${state}. Discarding it.`)
+        this.logger.warn(`The connection <-${peerId} is not in a sane state ${state}. Discarding it.`)
         conn.instance.close()
         this.receivedConnections.delete(peerId)
       }
@@ -264,9 +264,12 @@ export class Mesh {
 
     this.debugWebRtc(`Got offer message from ${peerId}`)
 
-    if (this.initiatedConnections.has(peerId)) {
+    const existentConnection = this.initiatedConnections.get(peerId)
+    if (existentConnection) {
       if (this.peerId < peerId) {
-        this.logger.warn(`Both peers try to establish connection with each other ${peerId}, ignoring ofer`)
+        this.logger.warn(`Both peers try to establish connection with each other ${peerId}, closing old connection`)
+        existentConnection.instance.close()
+        this.initiatedConnections.delete(peerId)
         return
       }
       this.logger.warn(`Both peers try to establish connection with each other ${peerId}, keeping this offer`)

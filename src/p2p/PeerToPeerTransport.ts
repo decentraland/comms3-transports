@@ -783,7 +783,6 @@ export class P2PTransport extends Transport {
     }
 
     const neededConnections = DEFAULT_TARGET_CONNECTIONS - this.mesh.connectedCount()
-
     // If we need to establish new connections because we are below the target, we do that
     if (neededConnections > 0 && connectionCandidates.length > 0) {
       if (this.config.verbose) {
@@ -798,7 +797,9 @@ export class P2PTransport extends Transport {
 
         await Promise.all(
           candidates.map((candidate) =>
-            this.connectTo(candidate).catch((e) => this.logger.log(`Error connecting to candidate ${candidate} ${e} `))
+            this.connectTo(candidate).catch((e) =>
+              this.logger.log(`Error connecting to candidate ${candidate} ${e.toString()}`)
+            )
           )
         )
         return remaining
@@ -809,7 +810,7 @@ export class P2PTransport extends Transport {
     const toDisconnect = this.mesh.connectedCount() - DEFAULT_MAX_CONNECTIONS
 
     if (toDisconnect > 0) {
-      this.logger.log(`Too many connections.Need to disconnect from: ${toDisconnect} `)
+      this.logger.log(`Too many connections. Need to disconnect from: ${toDisconnect}`)
       return async () => {
         Object.values(this.knownPeers)
           .filter((peer) => this.isConnectedTo(peer.id))
