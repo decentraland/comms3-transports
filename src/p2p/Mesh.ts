@@ -66,6 +66,11 @@ export class Mesh {
 
     const instance = this.createConnection(peerId)
     const conn: Connection = { instance, createTimestamp: Date.now() }
+    conn.instance.addEventListener('connectionstatechange', (_) => {
+      if (conn.instance.connectionState === 'new') {
+        conn.createTimestamp = Date.now()
+      }
+    })
 
     this.debugWebRtc(`Opening dc for ${peerId}`)
     const dc = instance.createDataChannel('data')
@@ -230,10 +235,6 @@ export class Mesh {
       }
     })
 
-    instance.addEventListener('connectionstatechange', () => {
-      this.debugWebRtc(`Connection with ${peerId}, status changed: ${instance.connectionState}`)
-    })
-
     instance.addEventListener('iceconnectionstatechange', () => {
       this.debugWebRtc(`Connection with ${peerId}, ice status changed: ${instance.iceConnectionState}`)
     })
@@ -274,6 +275,13 @@ export class Mesh {
     const offer = JSON.parse(this.decoder.decode(data))
     const instance = this.createConnection(peerId)
     const conn: Connection = { instance, createTimestamp: Date.now() }
+
+    instance.addEventListener('connectionstatechange', () => {
+      if (instance.connectionState === 'new') {
+        conn.createTimestamp = Date.now()
+      }
+    })
+
     this.receivedConnections.set(peerId, conn)
 
     instance.addEventListener('datachannel', (event) => {
