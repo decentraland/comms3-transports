@@ -825,19 +825,18 @@ export class P2PTransport extends Transport {
     if (connectionCandidates.length > 0) {
       // We find the worst distance of the current connections
       const worstPeer = this.getWorstConnectedPeerByDistance()
-
       const sortedCandidates = connectionCandidates.sort(peerSortCriteria)
       // We find the best candidate
       const bestCandidate = sortedCandidates.splice(0, 1)[0]
 
-      if (bestCandidate) {
+      if (worstPeer && bestCandidate) {
         const bestCandidateDistance = this.distanceTo(bestCandidate.id)
 
-        if (typeof bestCandidateDistance !== 'undefined' && (!worstPeer || bestCandidateDistance < worstPeer[0])) {
+        if (typeof bestCandidateDistance !== 'undefined' && bestCandidateDistance < worstPeer[0]) {
           // If the best candidate is better than the worst connection, we connect to that candidate.
           // The next operation should handle the disconnection of the worst
           this.logger.log(
-            `Found a better candidate for connection: ${bestCandidateDistance} distance: ${bestCandidateDistance} worst: ${worstPeer} `
+            `Found a better candidate for connection, replacing ${worstPeer[1]} (${worstPeer[0]}) with ${bestCandidate} (${bestCandidateDistance})`
           )
           return async () => {
             await this.connectTo(bestCandidate)

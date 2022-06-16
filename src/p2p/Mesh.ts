@@ -66,9 +66,19 @@ export class Mesh {
 
     const instance = this.createConnection(peerId)
     const conn: Connection = { instance, createTimestamp: Date.now() }
-    conn.instance.addEventListener('connectionstatechange', (_) => {
-      if (conn.instance.connectionState === 'new') {
-        conn.createTimestamp = Date.now()
+    instance.addEventListener('connectionstatechange', (_) => {
+      switch (instance.connectionState) {
+        case 'new':
+          conn.createTimestamp = Date.now()
+          break
+        case 'closed':
+          this.receivedConnections.delete(peerId)
+          break
+        case 'failed':
+          this.receivedConnections.delete(peerId)
+          break
+        default:
+          break
       }
     })
 
@@ -113,15 +123,14 @@ export class Mesh {
     let conn = this.initiatedConnections.get(peerId)
     if (conn) {
       conn.instance.close()
+      this.initiatedConnections.delete(peerId)
     }
 
     conn = this.receivedConnections.get(peerId)
     if (conn) {
       conn.instance.close()
+      this.receivedConnections.delete(peerId)
     }
-
-    this.initiatedConnections.delete(peerId)
-    this.receivedConnections.delete(peerId)
   }
 
   public hasConnectionsFor(peerId: string): boolean {
@@ -278,15 +287,23 @@ export class Mesh {
     const offer = JSON.parse(this.decoder.decode(data))
     const instance = this.createConnection(peerId)
     const conn: Connection = { instance, createTimestamp: Date.now() }
-
-    instance.addEventListener('connectionstatechange', () => {
-      if (instance.connectionState === 'new') {
-        conn.createTimestamp = Date.now()
-      }
-    })
-
     this.receivedConnections.set(peerId, conn)
 
+    instance.addEventListener('connectionstatechange', () => {
+      switch (instance.connectionState) {
+        case 'new':
+          conn.createTimestamp = Date.now()
+          break
+        case 'closed':
+          this.receivedConnections.delete(peerId)
+          break
+        case 'failed':
+          this.receivedConnections.delete(peerId)
+          break
+        default:
+          break
+      }
+    })
     instance.addEventListener('datachannel', (event) => {
       this.debugWebRtc(`Got data channel from ${peerId}`)
       const dc = event.channel
