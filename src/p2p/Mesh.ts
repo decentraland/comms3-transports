@@ -195,11 +195,11 @@ export class Mesh {
 
   public sendPacketToPeer(peerId: string, data: Uint8Array): void {
     let conn = this.initiatedConnections.get(peerId)
-    if (conn && conn.dc) {
+    if (conn && conn.dc && conn.dc.readyState === 'open') {
       conn.dc.send(data)
     }
     conn = this.receivedConnections.get(peerId)
-    if (conn && conn.dc) {
+    if (conn && conn.dc && conn.dc.readyState === 'open') {
       conn.dc.send(data)
     }
   }
