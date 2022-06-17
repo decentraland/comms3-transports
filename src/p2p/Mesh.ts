@@ -29,7 +29,8 @@ export class Mesh {
   private debugWebRtcEnabled: boolean
   private packetHandler: (data: Uint8Array, peerId: string) => void
   private isKnownPeer: (peerId: string) => boolean
-  private peerConnections = new Map<string, Connection>()
+  private initiatedConnections = new Map<string, Connection>()
+  private receivedConnections = new Map<string, Connection>()
   private candidatesListener: TopicListener | null = null
   private answerListener: TopicListener | null = null
   private offerListener: TopicListener | null = null
@@ -57,7 +58,7 @@ export class Mesh {
   }
 
   public async connectTo(peerId: string): Promise<void> {
-    if (this.peerConnections.has(peerId)) {
+    if (this.initiatedConnections.has(peerId) || this.receivedConnections.has(peerId)) {
       return
     }
 
@@ -65,6 +66,21 @@ export class Mesh {
 
     const instance = this.createConnection(peerId)
     const conn: Connection = { instance, createTimestamp: Date.now() }
+    instance.addEventListener('connectionstatechange', (_) => {
+      switch (instance.connectionState) {
+        case 'new':
+          conn.createTimestamp = Date.now()
+          break
+        case 'closed':
+          this.receivedConnections.delete(peerId)
+          break
+        case 'failed':
+          this.receivedConnections.delete(peerId)
+          break
+        default:
+          break
+      }
+    })
 
     this.debugWebRtc(`Opening dc for ${peerId}`)
     const dc = instance.createDataChannel('data')
@@ -84,12 +100,17 @@ export class Mesh {
     this.debugWebRtc(`Sending offer to ${peerId}`)
     await this.bff.publishToTopic(`${peerId}.offer`, this.encoder.encode(JSON.stringify(offer)))
 
-    this.peerConnections.set(peerId, conn)
+    this.initiatedConnections.set(peerId, conn)
   }
 
   public connectedCount(): number {
     let count = 0
-    this.peerConnections.forEach(({ instance }: Connection) => {
+    this.initiatedConnections.forEach(({ instance }: Connection) => {
+      if (instance.connectionState === 'connected') {
+        count++
+      }
+    })
+    this.receivedConnections.forEach(({ instance }: Connection) => {
       if (instance.connectionState === 'connected') {
         count++
       }
@@ -99,34 +120,52 @@ export class Mesh {
 
   public disconnectFrom(peerId: string): void {
     this.logger.log(`Disconnecting from ${peerId}`)
-    const conn = this.peerConnections.get(peerId)
+    let conn = this.initiatedConnections.get(peerId)
     if (conn) {
       conn.instance.close()
+      this.initiatedConnections.delete(peerId)
     }
 
-    this.peerConnections.delete(peerId)
+    conn = this.receivedConnections.get(peerId)
+    if (conn) {
+      conn.instance.close()
+      this.receivedConnections.delete(peerId)
+    }
   }
 
   public hasConnectionsFor(peerId: string): boolean {
-    return !!this.peerConnections.get(peerId)
+    return !!(this.initiatedConnections.get(peerId) || this.receivedConnections.get(peerId))
   }
 
   public isConnectedTo(peerId: string): boolean {
-    const conn = this.peerConnections.get(peerId)
-    if (!conn) {
-      return false
+    let conn = this.initiatedConnections.get(peerId)
+    if (conn && conn.instance.connectionState === 'connected') {
+      return true
     }
-    return conn.instance.connectionState === 'connected'
+    conn = this.receivedConnections.get(peerId)
+    if (conn && conn.instance.connectionState === 'connected') {
+      return true
+    }
+
+    return false
   }
 
   public connectedPeerIds(): string[] {
-    return Array.from(this.peerConnections.keys())
+    const peerIds = new Set(this.initiatedConnections.keys())
+    this.receivedConnections.forEach((_, peerId) => peerIds.add(peerId))
+    return Array.from(peerIds)
   }
 
   public fullyConnectedPeerIds(): string[] {
     const peers: string[] = []
 
-    this.peerConnections.forEach(({ instance }: Connection, peerId: string) => {
+    this.initiatedConnections.forEach(({ instance }: Connection, peerId: string) => {
+      if (instance.connectionState === 'connected') {
+        peers.push(peerId)
+      }
+    })
+
+    this.receivedConnections.forEach(({ instance }: Connection, peerId: string) => {
       if (instance.connectionState === 'connected') {
         peers.push(peerId)
       }
@@ -136,21 +175,33 @@ export class Mesh {
   }
 
   public checkConnectionsSanity(): void {
-    this.peerConnections.forEach((conn: Connection, peerId: string) => {
-      if (conn.instance.connectionState !== 'connected' && Date.now() - conn.createTimestamp > PEER_CONNECT_TIMEOUT) {
-        this.logger.warn(`The connection to ${peerId} is not in a sane state. Discarding it.`)
-        this.disconnectFrom(peerId)
+    this.initiatedConnections.forEach((conn: Connection, peerId: string) => {
+      const state = conn.instance.connectionState
+      if (state !== 'connected' && Date.now() - conn.createTimestamp > PEER_CONNECT_TIMEOUT) {
+        this.logger.warn(`The connection ->${peerId} is not in a sane state ${state}. Discarding it.`)
+        conn.instance.close()
+        this.initiatedConnections.delete(peerId)
+      }
+    })
+    this.receivedConnections.forEach((conn: Connection, peerId: string) => {
+      const state = conn.instance.connectionState
+      if (state !== 'connected' && Date.now() - conn.createTimestamp > PEER_CONNECT_TIMEOUT) {
+        this.logger.warn(`The connection <-${peerId} is not in a sane state ${state}. Discarding it.`)
+        conn.instance.close()
+        this.receivedConnections.delete(peerId)
       }
     })
   }
 
   public sendPacketToPeer(peerId: string, data: Uint8Array): void {
-    const conn = this.peerConnections.get(peerId)
-    if (!conn || !conn.dc) {
-      return
+    let conn = this.initiatedConnections.get(peerId)
+    if (conn && conn.dc) {
+      conn.dc.send(data)
     }
-
-    conn.dc.send(data)
+    conn = this.receivedConnections.get(peerId)
+    if (conn && conn.dc) {
+      conn.dc.send(data)
+    }
   }
 
   async dispose(): Promise<void> {
@@ -166,11 +217,15 @@ export class Mesh {
       await this.bff.removePeerTopicListener(this.offerListener)
     }
 
-    this.peerConnections.forEach(({ instance }: Connection) => {
+    this.initiatedConnections.forEach(({ instance }: Connection) => {
+      instance.close()
+    })
+    this.receivedConnections.forEach(({ instance }: Connection) => {
       instance.close()
     })
 
-    this.peerConnections.clear()
+    this.initiatedConnections.clear()
+    this.receivedConnections.clear()
   }
 
   private createConnection(peerId: string) {
@@ -181,15 +236,12 @@ export class Mesh {
     instance.addEventListener('icecandidate', async (event) => {
       if (event.candidate) {
         try {
-          await this.bff.publishToTopic(`${peerId}.candidate`, this.encoder.encode(JSON.stringify(event.candidate)))
+          const msg = { candidate: event.candidate, initiator: this.peerId }
+          await this.bff.publishToTopic(`${peerId}.candidate`, this.encoder.encode(JSON.stringify(msg)))
         } catch (err: any) {
           this.logger.error(`cannot publish ice candidate: ${err.toString()}`)
         }
       }
-    })
-
-    instance.addEventListener('connectionstatechange', () => {
-      this.debugWebRtc(`Connection with ${peerId}, status changed: ${instance.connectionState}`)
     })
 
     instance.addEventListener('iceconnectionstatechange', () => {
@@ -199,13 +251,14 @@ export class Mesh {
   }
 
   private async onCandidateMessage(data: Uint8Array, peerId: string) {
-    const conn = this.peerConnections.get(peerId)
-    if (!conn) {
-      return
-    }
-
     try {
-      const candidate = JSON.parse(this.decoder.decode(data))
+      const { candidate, initiator } = JSON.parse(this.decoder.decode(data))
+
+      const conn = (initiator === this.peerId ? this.initiatedConnections : this.receivedConnections).get(peerId)
+      if (!conn) {
+        return
+      }
+
       await conn.instance.addIceCandidate(candidate)
     } catch (e: any) {
       this.logger.error(`Failed to add ice candidate: ${e.toString()}`)
@@ -220,9 +273,12 @@ export class Mesh {
 
     this.debugWebRtc(`Got offer message from ${peerId}`)
 
-    if (this.peerConnections.has(peerId)) {
+    const existentConnection = this.initiatedConnections.get(peerId)
+    if (existentConnection) {
       if (this.peerId < peerId) {
-        this.logger.warn(`Both peers try to establish connection with each other ${peerId}, ignoring ofer`)
+        this.logger.warn(`Both peers try to establish connection with each other ${peerId}, closing old connection`)
+        existentConnection.instance.close()
+        this.initiatedConnections.delete(peerId)
         return
       }
       this.logger.warn(`Both peers try to establish connection with each other ${peerId}, keeping this offer`)
@@ -231,8 +287,23 @@ export class Mesh {
     const offer = JSON.parse(this.decoder.decode(data))
     const instance = this.createConnection(peerId)
     const conn: Connection = { instance, createTimestamp: Date.now() }
-    this.peerConnections.set(peerId, conn)
+    this.receivedConnections.set(peerId, conn)
 
+    instance.addEventListener('connectionstatechange', () => {
+      switch (instance.connectionState) {
+        case 'new':
+          conn.createTimestamp = Date.now()
+          break
+        case 'closed':
+          this.receivedConnections.delete(peerId)
+          break
+        case 'failed':
+          this.receivedConnections.delete(peerId)
+          break
+        default:
+          break
+      }
+    })
     instance.addEventListener('datachannel', (event) => {
       this.debugWebRtc(`Got data channel from ${peerId}`)
       const dc = event.channel
@@ -264,7 +335,7 @@ export class Mesh {
 
   private async onAnswerListener(data: Uint8Array, peerId: string) {
     this.debugWebRtc(`Got answer message from ${peerId}`)
-    const conn = this.peerConnections.get(peerId)
+    const conn = this.initiatedConnections.get(peerId)
     if (!conn) {
       return
     }

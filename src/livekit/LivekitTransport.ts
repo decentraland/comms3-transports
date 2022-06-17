@@ -9,7 +9,8 @@ import {
   RemoteTrackPublication,
   RemoteTrack,
   Participant,
-  DataPacket_Kind
+  DataPacket_Kind,
+  ConnectionState
 } from 'livekit-client'
 
 export type LivekitConfig = {
@@ -46,6 +47,11 @@ export class LivekitTransport extends Transport {
       .on(RoomEvent.TrackUnsubscribed, (_: RemoteTrack, __: RemoteTrackPublication, ___: RemoteParticipant) => {
         if (verbose) {
           this.logger.log('track unsubscribed')
+        }
+      })
+      .on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
+        if (verbose) {
+          this.logger.log(`Connection State has changed ${state}`)
         }
       })
       .on(RoomEvent.Disconnected, () => {

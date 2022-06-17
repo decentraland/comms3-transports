@@ -723,7 +723,14 @@ export class P2PTransport extends Transport {
 
       this.mesh.checkConnectionsSanity()
 
-      let connectionCandidates = Object.values(this.knownPeers).filter((it) => this.isValidConnectionCandidate(it))
+      let connectionCandidates = Object.values(this.knownPeers).filter((it) => {
+        if (this.isConnectedTo(it.id)) {
+          return false
+        }
+
+        const distance = this.distanceTo(it.id)
+        return typeof distance !== 'undefined' && distance <= MAX_CONNECTION_DISTANCE
+      })
 
       let operation: NetworkOperation | undefined
       while ((operation = this.calculateNextNetworkOperation(connectionCandidates))) {
@@ -741,15 +748,6 @@ export class P2PTransport extends Transport {
 
       this.updatingNetwork = false
     }
-  }
-
-  private isValidConnectionCandidate(it: KnownPeerData): boolean {
-    return !this.isConnectedTo(it.id) && this.isValidConnectionByDistance(it)
-  }
-
-  private isValidConnectionByDistance(peer: KnownPeerData) {
-    const distance = this.distanceTo(peer.id)
-    return typeof distance !== 'undefined' && distance <= MAX_CONNECTION_DISTANCE
   }
 
   private peerSortCriteria() {
@@ -783,7 +781,6 @@ export class P2PTransport extends Transport {
     }
 
     const neededConnections = DEFAULT_TARGET_CONNECTIONS - this.mesh.connectedCount()
-
     // If we need to establish new connections because we are below the target, we do that
     if (neededConnections > 0 && connectionCandidates.length > 0) {
       if (this.config.verbose) {
@@ -798,7 +795,9 @@ export class P2PTransport extends Transport {
 
         await Promise.all(
           candidates.map((candidate) =>
-            this.connectTo(candidate).catch((e) => this.logger.log(`Error connecting to candidate ${candidate} ${e} `))
+            this.connectTo(candidate).catch((e) =>
+              this.logger.log(`Error connecting to candidate ${candidate} ${e.toString()}`)
+            )
           )
         )
         return remaining
@@ -807,9 +806,8 @@ export class P2PTransport extends Transport {
 
     // If we are over the max amount of connections, we discard the "worst"
     const toDisconnect = this.mesh.connectedCount() - DEFAULT_MAX_CONNECTIONS
-
     if (toDisconnect > 0) {
-      this.logger.log(`Too many connections.Need to disconnect from: ${toDisconnect} `)
+      this.logger.log(`Too many connections. Need to disconnect from: ${toDisconnect}`)
       return async () => {
         Object.values(this.knownPeers)
           .filter((peer) => this.isConnectedTo(peer.id))
@@ -824,19 +822,18 @@ export class P2PTransport extends Transport {
     if (connectionCandidates.length > 0) {
       // We find the worst distance of the current connections
       const worstPeer = this.getWorstConnectedPeerByDistance()
-
       const sortedCandidates = connectionCandidates.sort(peerSortCriteria)
       // We find the best candidate
       const bestCandidate = sortedCandidates.splice(0, 1)[0]
 
-      if (bestCandidate) {
+      if (worstPeer && bestCandidate) {
         const bestCandidateDistance = this.distanceTo(bestCandidate.id)
 
-        if (typeof bestCandidateDistance !== 'undefined' && (!worstPeer || bestCandidateDistance < worstPeer[0])) {
+        if (typeof bestCandidateDistance !== 'undefined' && bestCandidateDistance < worstPeer[0]) {
           // If the best candidate is better than the worst connection, we connect to that candidate.
           // The next operation should handle the disconnection of the worst
           this.logger.log(
-            `Found a better candidate for connection: ${bestCandidateDistance} distance: ${bestCandidateDistance} worst: ${worstPeer} `
+            `Found a better candidate for connection, replacing ${worstPeer[1]} (${worstPeer[0]}) with ${bestCandidate} (${bestCandidateDistance})`
           )
           return async () => {
             await this.connectTo(bestCandidate)
@@ -850,13 +847,11 @@ export class P2PTransport extends Transport {
     const connectionsToDrop = this.mesh.connectedPeerIds().filter((it) => {
       const distance = this.distanceTo(it)
       // We need to check that we are actually connected to the peer, and also only disconnect to it if we know we are far away and we don't have any rooms in common
-      return this.isConnectedTo(it) && distance && distance >= DISCONNECT_DISTANCE
+      return distance && distance >= DISCONNECT_DISTANCE
     })
 
     if (connectionsToDrop.length > 0) {
-      this.logger.log(
-        `Dropping connections because they are too far away and don't have rooms in common: ${connectionsToDrop}`
-      )
+      this.logger.log(`Dropping connections because they are too far away: ${JSON.stringify(connectionsToDrop)}`)
       return async () => {
         connectionsToDrop.forEach((it) => this.disconnectFrom(it))
         return connectionCandidates
