@@ -193,15 +193,18 @@ export class Mesh {
     })
   }
 
-  public sendPacketToPeer(peerId: string, data: Uint8Array): void {
+  public sendPacketToPeer(peerId: string, data: Uint8Array): boolean {
     let conn = this.initiatedConnections.get(peerId)
     if (conn && conn.dc && conn.dc.readyState === 'open') {
       conn.dc.send(data)
+      return true
     }
     conn = this.receivedConnections.get(peerId)
     if (conn && conn.dc && conn.dc.readyState === 'open') {
       conn.dc.send(data)
+      return true
     }
+    return false
   }
 
   async dispose(): Promise<void> {
@@ -256,6 +259,12 @@ export class Mesh {
 
       const conn = (initiator === this.peerId ? this.initiatedConnections : this.receivedConnections).get(peerId)
       if (!conn) {
+        return
+      }
+
+      const state = conn.instance.connectionState
+      if (state !== 'connecting' && state !== 'new') {
+        this.debugWebRtc(`No setting ice candidate for ${peerId}, connection is in state ${state}`)
         return
       }
 
@@ -337,6 +346,12 @@ export class Mesh {
     this.debugWebRtc(`Got answer message from ${peerId}`)
     const conn = this.initiatedConnections.get(peerId)
     if (!conn) {
+      return
+    }
+
+    const state = conn.instance.connectionState
+    if (state !== 'connecting' && state !== 'new') {
+      this.debugWebRtc(`No setting remote description for ${peerId} connection is in state ${state}`)
       return
     }
 

@@ -679,9 +679,9 @@ export class P2PTransport extends Transport {
 
     if (this.isConnectedTo(peer)) {
       try {
-        this.mesh.sendPacketToPeer(peer, d)
-
-        this.statisticsCollector.onBytesSent(d.length)
+        if (this.mesh.sendPacketToPeer(peer, d)) {
+          this.statisticsCollector.onBytesSent(d.length)
+        }
       } catch (e: any) {
         this.logger.warn(`Error sending data to peer ${peer} ${e.toString()}`)
       }
