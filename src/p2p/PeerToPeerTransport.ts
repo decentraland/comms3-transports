@@ -260,6 +260,7 @@ export class P2PTransport {
 
       const packetKey = `${packet.src}_${packet.instanceId}_${packet.sequenceId}`
       const alreadyReceived = !!this.receivedPackets[packetKey]
+      const expired = this.checkExpired(packet)
 
       this.ensureAndUpdateKnownPeer(packet, peerId)
 
@@ -272,8 +273,6 @@ export class P2PTransport {
         }
       }
 
-      const expired = this.checkExpired(packet)
-
       if (packet.hops >= 1) {
         this.countRelay(peerId, packet, expired, alreadyReceived)
       }
@@ -281,6 +280,10 @@ export class P2PTransport {
       if (!alreadyReceived && !expired) {
         this.processPacket(packet)
       } else {
+        if (peerId === packet.src) {
+          this.logger.warn(`Requesting relay suspension for direct packet`)
+        }
+
         this.requestRelaySuspension(packet, peerId)
       }
     } catch (e: any) {
@@ -441,14 +444,15 @@ export class P2PTransport {
           durationMillis: suspensionConfig.relaySuspensionDuration
         }
 
-        this.logger.log(`Requesting relay suspension to ${peerId} ${suspendRelayData}`)
+        if (this.config.verbose) {
+          this.logger.log(`Requesting relay suspension to ${peerId} ${JSON.stringify(suspendRelayData)}`)
+        }
 
         const packet = this.buildPacketWithData(SuspendRelayType, {
           suspendRelayData
         })
 
-        const d = Packet.encode(packet).finish()
-        this.sendPacketToPeer(peerId, d)
+        this.sendPacketToPeer(peerId, Packet.encode(packet).finish())
 
         suspendRelayData.relayedPeers.forEach((relayedPeerId) => {
           relayData.theirSuspendedRelays[relayedPeerId] = Date.now() + suspensionConfig.relaySuspensionDuration
@@ -470,7 +474,9 @@ export class P2PTransport {
       return
     }
 
-    this.logger.log(`Consolidating suspension for ${packet.src}->${connectedPeerId}`)
+    if (this.config.verbose) {
+      this.logger.log(`Consolidating suspension for ${packet.src}->${connectedPeerId}`)
+    }
 
     const now = Date.now()
 
@@ -482,7 +488,9 @@ export class P2PTransport {
         !this.isRelayFromConnectionSuspended(it.id, packet.src, now)
     )
 
-    this.logger.log(`${packet.src} is reachable through ${JSON.stringify(reachableThrough)}`)
+    if (this.config.verbose) {
+      this.logger.log(`${packet.src} is reachable through ${JSON.stringify(reachableThrough)}`)
+    }
 
     // We only suspend if we will have at least 1 path of connection for this peer after suspensions
     if (reachableThrough.length > 1 || (reachableThrough.length === 1 && reachableThrough[0].id !== connectedPeerId)) {
