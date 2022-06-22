@@ -270,6 +270,7 @@ export class P2PTransport {
 
   private handlePeerPacket(data: Uint8Array, peerId: string) {
     if (this.disposed) return
+    console.log('HERE', data.length)
     this.statisticsCollector.onBytesRecv(data.length)
     try {
       const packet = Packet.decode(Reader.create(new Uint8Array(data)))
