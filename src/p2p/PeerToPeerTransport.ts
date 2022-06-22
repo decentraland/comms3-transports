@@ -1,8 +1,8 @@
 import { Reader } from 'protobufjs/minimal'
+import { Observable } from 'mz-observable'
 import { future } from 'fp-future'
 
-import { BFFConnection, TopicListener, Position3D, ILogger } from '../types'
-import { SendOpts, Transport } from '../Transport'
+import { TransportMessage, BFFConnection, TopicListener, Position3D, ILogger, SendOpts } from '../types'
 import { StatisticsCollector } from '../statistics'
 import { JoinIslandMessage, LeftIslandMessage } from '../proto/archipelago'
 import { SuspendRelayData, PingData, PongData, Packet, MessageData } from '../proto/p2p'
@@ -49,9 +49,12 @@ const DEFAULT_TARGET_CONNECTIONS = 4
 const DEFAULT_MAX_CONNECTIONS = 6
 const DEFAULT_MESSAGE_EXPIRATION_TIME = 10000
 
-export class P2PTransport extends Transport {
+export class P2PTransport {
   public mesh: Mesh
-  public peerId: string
+  public readonly peerId: string
+  public readonly name = 'p2p'
+  public onDisconnectObservable = new Observable<void>()
+  public onMessageObservable = new Observable<TransportMessage>()
 
   private statisticsCollector: StatisticsCollector
   private islandId: string
@@ -74,7 +77,6 @@ export class P2PTransport extends Transport {
   private onPeerLeftListener: TopicListener | null = null
 
   constructor(private config: P2PConfig, peers: Map<string, Position3D>) {
-    super()
     this.distance = discretizedPositionDistanceXZ()
     this.instanceId = randomUint32()
     this.logger = this.config.logger
@@ -82,7 +84,7 @@ export class P2PTransport extends Transport {
     this.islandId = this.config.islandId
     this.bffConnection = this.config.bff
     this.config.verbose = this.config.verbose
-    this.statisticsCollector = new StatisticsCollector('p2p', this.peerId, this.islandId)
+    this.statisticsCollector = new StatisticsCollector(this.peerId, this.islandId)
 
     this.mesh = new Mesh(this.bffConnection, this.peerId, {
       logger: this.logger,
@@ -225,22 +227,15 @@ export class P2PTransport extends Transport {
     this.onDisconnectObservable.notifyObservers()
   }
 
-  async send(msg: Uint8Array, { reliable }: SendOpts): Promise<void> {
+  async send(payload: Uint8Array, { reliable }: SendOpts): Promise<void> {
     if (this.disposed) {
       return
     }
-    try {
-      const t = reliable ? PeerMessageTypes.reliable('data') : PeerMessageTypes.unreliable('data')
-      await this.sendMessage(this.islandId, msg, t)
-    } catch (e: any) {
-      const message = e.message
-      if (typeof message === 'string' && message.startsWith('cannot send a message in a room not joined')) {
-        // We can ignore this error. This is usually just a problem of eventual consistency.
-        // And when it is not, it is usually caused by another error that we might find above. Effectively, we are just making noise.
-      } else {
-        throw e
-      }
-    }
+    const t = reliable ? PeerMessageTypes.reliable('data') : PeerMessageTypes.unreliable('data')
+
+    const messageData = { room: this.islandId, payload, dst: [] }
+    const packet = this.buildPacketWithData(t, { messageData })
+    this.sendPacket(packet)
   }
 
   isKnownPeer(peerId: string): boolean {
@@ -565,16 +560,6 @@ export class P2PTransport extends Transport {
     }
 
     return false
-  }
-
-  sendMessage(roomId: string, payload: Uint8Array, type: PeerMessageType) {
-    if (roomId !== this.islandId) {
-      return Promise.reject(new Error(`cannot send a message in a room not joined(${roomId})`))
-    }
-
-    const messageData = { room: roomId, payload, dst: [] }
-    const packet = this.buildPacketWithData(type, { messageData })
-    this.sendPacket(packet)
   }
 
   private buildPacketWithData(type: PeerMessageType, data: PacketData): Packet {

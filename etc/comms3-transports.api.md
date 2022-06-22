@@ -10,14 +10,13 @@ import { Observable } from 'mz-observable';
 // Warning: (ae-forgotten-export) The symbol "IslandChangedMessage" needs to be exported by the entry point index.d.ts
 //
 // @public
-export function createTransport(config: TransportsConfig, islandChangedMessage: IslandChangedMessage): Transport | null;
+export function createTransport(config: TransportsConfig, islandChangedMessage: IslandChangedMessage): Transport | Transport | Transport | null;
 
 // @public
-export class DummyTransport extends Transport {
+export class DummyTransport {
     // (undocumented)
     collectStatistics(): {
         time: number;
-        transport: string;
         peerId: string;
         islandId: string;
         bytesSent: number;
@@ -28,6 +27,14 @@ export class DummyTransport extends Transport {
     // (undocumented)
     disconnect(): Promise<void>;
     // (undocumented)
+    readonly name = "dummy";
+    // (undocumented)
+    onDisconnectObservable: Observable<void>;
+    // Warning: (ae-forgotten-export) The symbol "TransportMessage" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    onMessageObservable: Observable<TransportMessage>;
+    // (undocumented)
     send(): Promise<void>;
 }
 
@@ -35,36 +42,16 @@ export class DummyTransport extends Transport {
 export type Position3D = [number, number, number];
 
 // @public
-export type SendOpts = {
-    reliable: boolean;
-    identity?: boolean;
+export type Transport = {
+    name: TransportName;
+    connect(): Promise<void>;
+    send(msg: Uint8Array, opts: SendOpts): Promise<void>;
+    disconnect(): Promise<void>;
+    onPeerPositionChange(peerId: string, position: Position3D): void;
 };
 
 // @public
-export abstract class Transport {
-    // Warning: (ae-forgotten-export) The symbol "TransportStatistics" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    abstract collectStatistics(): TransportStatistics;
-    // (undocumented)
-    abstract connect(): Promise<void>;
-    // (undocumented)
-    abstract disconnect(): Promise<void>;
-    // (undocumented)
-    onDisconnectObservable: Observable<void>;
-    // (undocumented)
-    onMessageObservable: Observable<TransportMessage>;
-    // (undocumented)
-    onPeerPositionChange(_: string, __: Position3D): void;
-    // (undocumented)
-    abstract send(msg: Uint8Array, opts: SendOpts): Promise<void>;
-}
-
-// @public
-export type TransportMessage = {
-    payload: Uint8Array;
-    peer: string;
-};
+export type TransportName = 'livekit' | 'ws' | 'p2p' | 'dummy';
 
 // @public
 export type TransportsConfig = {
@@ -84,9 +71,10 @@ export type TransportsConfig = {
 
 // Warnings were encountered during analysis:
 //
-// src/index.ts:17:3 - (ae-forgotten-export) The symbol "ILogger" needs to be exported by the entry point index.d.ts
-// src/index.ts:18:3 - (ae-forgotten-export) The symbol "BFFConnection" needs to be exported by the entry point index.d.ts
-// src/index.ts:27:5 - (ae-forgotten-export) The symbol "RelaySuspensionConfig" needs to be exported by the entry point index.d.ts
+// src/index.ts:15:3 - (ae-forgotten-export) The symbol "ILogger" needs to be exported by the entry point index.d.ts
+// src/index.ts:16:3 - (ae-forgotten-export) The symbol "BFFConnection" needs to be exported by the entry point index.d.ts
+// src/index.ts:25:5 - (ae-forgotten-export) The symbol "RelaySuspensionConfig" needs to be exported by the entry point index.d.ts
+// src/types.ts:15:3 - (ae-forgotten-export) The symbol "SendOpts" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
