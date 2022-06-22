@@ -447,7 +447,8 @@ export class P2PTransport {
           suspendRelayData
         })
 
-        this.sendPacketToPeer(peerId, packet)
+        const d = Packet.encode(packet).finish()
+        this.sendPacketToPeer(peerId, d)
 
         suspendRelayData.relayedPeers.forEach((relayedPeerId) => {
           relayData.theirSuspendedRelays[relayedPeerId] = Date.now() + suspensionConfig.relaySuspensionDuration
@@ -666,16 +667,15 @@ export class P2PTransport {
       }
     }
 
-    peersToSend.forEach((peer) => this.sendPacketToPeer(peer, packet))
+    const d = Packet.encode(packet).finish()
+    peersToSend.forEach((peer) => this.sendPacketToPeer(peer, d))
   }
 
-  private sendPacketToPeer(peer: string, packet: Packet) {
-    const d = Packet.encode(packet).finish()
-
+  private sendPacketToPeer(peer: string, payload: Uint8Array) {
     if (this.isConnectedTo(peer)) {
       try {
-        if (this.mesh.sendPacketToPeer(peer, d)) {
-          this.statisticsCollector.onBytesSent(d.length)
+        if (this.mesh.sendPacketToPeer(peer, payload)) {
+          this.statisticsCollector.onBytesSent(payload.length)
         }
       } catch (e: any) {
         this.logger.warn(`Error sending data to peer ${peer} ${e.toString()}`)
