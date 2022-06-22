@@ -1,8 +1,8 @@
 import { Reader } from 'protobufjs/minimal'
+import { Observable } from 'mz-observable'
 import { future } from 'fp-future'
 
-import { BFFConnection, TopicListener, Position3D, ILogger } from '../types'
-import { SendOpts, Transport } from '../Transport'
+import { TransportMessage, BFFConnection, TopicListener, Position3D, ILogger, SendOpts } from '../types'
 import { StatisticsCollector } from '../statistics'
 import { JoinIslandMessage, LeftIslandMessage } from '../proto/archipelago'
 import { SuspendRelayData, PingData, PongData, Packet, MessageData } from '../proto/p2p'
@@ -49,12 +49,15 @@ const DEFAULT_TARGET_CONNECTIONS = 4
 const DEFAULT_MAX_CONNECTIONS = 6
 const DEFAULT_MESSAGE_EXPIRATION_TIME = 10000
 
-export class P2PTransport extends Transport {
+export class P2PTransport {
+  public readonly name = 'p2p'
+  public readonly peerId: string
+  public readonly islandId: string
   public mesh: Mesh
-  public peerId: string
+  public onDisconnectObservable = new Observable<void>()
+  public onMessageObservable = new Observable<TransportMessage>()
 
   private statisticsCollector: StatisticsCollector
-  private islandId: string
   private logger: ILogger
   private bffConnection: BFFConnection
   private distance: (l1: Position3D, l2: Position3D) => number
@@ -74,7 +77,6 @@ export class P2PTransport extends Transport {
   private onPeerLeftListener: TopicListener | null = null
 
   constructor(private config: P2PConfig, peers: Map<string, Position3D>) {
-    super()
     this.distance = discretizedPositionDistanceXZ()
     this.instanceId = randomUint32()
     this.logger = this.config.logger
@@ -82,7 +84,7 @@ export class P2PTransport extends Transport {
     this.islandId = this.config.islandId
     this.bffConnection = this.config.bff
     this.config.verbose = this.config.verbose
-    this.statisticsCollector = new StatisticsCollector('p2p', this.peerId, this.islandId)
+    this.statisticsCollector = new StatisticsCollector()
 
     this.mesh = new Mesh(this.bffConnection, this.peerId, {
       logger: this.logger,
@@ -136,7 +138,33 @@ export class P2PTransport extends Transport {
   }
 
   collectStatistics() {
-    return this.statisticsCollector.collectStatistics()
+    const s = this.statisticsCollector.collectStatistics()
+
+    let knownPeers = 0
+    Object.keys(this.knownPeers).forEach((_) => {
+      knownPeers++
+    })
+
+    let ownSuspendedRelays = 0
+    let theirSuspendedRelays = 0
+    Object.keys(this.peerRelayData).forEach((id) => {
+      const connected = this.peerRelayData[id]
+      // We expire peers suspensions
+      Object.keys(connected.ownSuspendedRelays).forEach((_) => {
+        ownSuspendedRelays++
+      })
+
+      Object.keys(connected.theirSuspendedRelays).forEach((_) => {
+        theirSuspendedRelays++
+      })
+    })
+
+    s.custom = {
+      knownPeers,
+      ownSuspendedRelays,
+      theirSuspendedRelays
+    }
+    return s
   }
 
   onPeerPositionChange(peerId: string, p: Position3D) {
@@ -225,22 +253,15 @@ export class P2PTransport extends Transport {
     this.onDisconnectObservable.notifyObservers()
   }
 
-  async send(msg: Uint8Array, { reliable }: SendOpts): Promise<void> {
+  async send(payload: Uint8Array, { reliable }: SendOpts): Promise<void> {
     if (this.disposed) {
       return
     }
-    try {
-      const t = reliable ? PeerMessageTypes.reliable('data') : PeerMessageTypes.unreliable('data')
-      await this.sendMessage(this.islandId, msg, t)
-    } catch (e: any) {
-      const message = e.message
-      if (typeof message === 'string' && message.startsWith('cannot send a message in a room not joined')) {
-        // We can ignore this error. This is usually just a problem of eventual consistency.
-        // And when it is not, it is usually caused by another error that we might find above. Effectively, we are just making noise.
-      } else {
-        throw e
-      }
-    }
+    const t = reliable ? PeerMessageTypes.reliable('data') : PeerMessageTypes.unreliable('data')
+
+    const messageData = { room: this.islandId, payload, dst: [] }
+    const packet = this.buildPacketWithData(t, { messageData })
+    this.sendPacket(packet)
   }
 
   isKnownPeer(peerId: string): boolean {
@@ -249,12 +270,14 @@ export class P2PTransport extends Transport {
 
   private handlePeerPacket(data: Uint8Array, peerId: string) {
     if (this.disposed) return
+    data = new Uint8Array(data)
     this.statisticsCollector.onBytesRecv(data.length)
     try {
-      const packet = Packet.decode(Reader.create(new Uint8Array(data)))
+      const packet = Packet.decode(Reader.create(data))
 
       const packetKey = `${packet.src}_${packet.instanceId}_${packet.sequenceId}`
       const alreadyReceived = !!this.receivedPackets[packetKey]
+      const expired = this.checkExpired(packet)
 
       this.ensureAndUpdateKnownPeer(packet, peerId)
 
@@ -267,8 +290,6 @@ export class P2PTransport extends Transport {
         }
       }
 
-      const expired = this.checkExpired(packet)
-
       if (packet.hops >= 1) {
         this.countRelay(peerId, packet, expired, alreadyReceived)
       }
@@ -276,6 +297,16 @@ export class P2PTransport extends Transport {
       if (!alreadyReceived && !expired) {
         this.processPacket(packet)
       } else {
+        if (peerId === packet.src) {
+          // NOTE(hugo): not part of the original implementation
+          if (this.config.verbose) {
+            this.logger.log(
+              `Skip requesting relay suspension for direct packet, already received: ${alreadyReceived}, expired: ${expired}`
+            )
+          }
+          return
+        }
+
         this.requestRelaySuspension(packet, peerId)
       }
     } catch (e: any) {
@@ -436,13 +467,15 @@ export class P2PTransport extends Transport {
           durationMillis: suspensionConfig.relaySuspensionDuration
         }
 
-        this.logger.log(`Requesting relay suspension to ${peerId} ${suspendRelayData}`)
+        if (this.config.verbose) {
+          this.logger.log(`Requesting relay suspension to ${peerId} ${JSON.stringify(suspendRelayData)}`)
+        }
 
         const packet = this.buildPacketWithData(SuspendRelayType, {
           suspendRelayData
         })
 
-        this.sendPacketToPeer(peerId, packet)
+        this.sendPacketToPeer(peerId, Packet.encode(packet).finish())
 
         suspendRelayData.relayedPeers.forEach((relayedPeerId) => {
           relayData.theirSuspendedRelays[relayedPeerId] = Date.now() + suspensionConfig.relaySuspensionDuration
@@ -464,7 +497,9 @@ export class P2PTransport extends Transport {
       return
     }
 
-    this.logger.log(`Consolidating suspension for ${packet.src}->${connectedPeerId}`)
+    if (this.config.verbose) {
+      this.logger.log(`Consolidating suspension for ${packet.src}->${connectedPeerId}`)
+    }
 
     const now = Date.now()
 
@@ -476,11 +511,15 @@ export class P2PTransport extends Transport {
         !this.isRelayFromConnectionSuspended(it.id, packet.src, now)
     )
 
-    this.logger.log(`${packet.src} is reachable through ${reachableThrough}`)
+    if (this.config.verbose) {
+      this.logger.log(`${packet.src} is reachable through ${JSON.stringify(reachableThrough)}`)
+    }
 
     // We only suspend if we will have at least 1 path of connection for this peer after suspensions
     if (reachableThrough.length > 1 || (reachableThrough.length === 1 && reachableThrough[0].id !== connectedPeerId)) {
-      this.logger.log(`Will add suspension for ${packet.src} -> ${connectedPeerId}`)
+      if (this.config.verbose) {
+        this.logger.log(`Will add suspension for ${packet.src} -> ${connectedPeerId}`)
+      }
       relayData.pendingSuspensionRequests.push(packet.src)
     }
   }
@@ -565,16 +604,6 @@ export class P2PTransport extends Transport {
     }
 
     return false
-  }
-
-  sendMessage(roomId: string, payload: Uint8Array, type: PeerMessageType) {
-    if (roomId !== this.islandId) {
-      return Promise.reject(new Error(`cannot send a message in a room not joined(${roomId})`))
-    }
-
-    const messageData = { room: roomId, payload, dst: [] }
-    const packet = this.buildPacketWithData(type, { messageData })
-    this.sendPacket(packet)
   }
 
   private buildPacketWithData(type: PeerMessageType, data: PacketData): Packet {
@@ -671,17 +700,16 @@ export class P2PTransport extends Transport {
       }
     }
 
-    peersToSend.forEach((peer) => this.sendPacketToPeer(peer, packet))
+    const d = Packet.encode(packet).finish()
+    peersToSend.forEach((peer) => this.sendPacketToPeer(peer, d))
   }
 
-  private sendPacketToPeer(peer: string, packet: Packet) {
-    const d = Packet.encode(packet).finish()
-
+  private sendPacketToPeer(peer: string, payload: Uint8Array) {
     if (this.isConnectedTo(peer)) {
       try {
-        this.mesh.sendPacketToPeer(peer, d)
-
-        this.statisticsCollector.onBytesSent(d.length)
+        if (this.mesh.sendPacketToPeer(peer, payload)) {
+          this.statisticsCollector.onBytesSent(payload.length)
+        }
       } catch (e: any) {
         this.logger.warn(`Error sending data to peer ${peer} ${e.toString()}`)
       }
@@ -793,13 +821,8 @@ export class P2PTransport extends Transport {
           this.logger.log(`Picked connection candidates ${JSON.stringify(candidates)} `)
         }
 
-        await Promise.all(
-          candidates.map((candidate) =>
-            this.connectTo(candidate).catch((e) =>
-              this.logger.log(`Error connecting to candidate ${candidate} ${e.toString()}`)
-            )
-          )
-        )
+        const reason = `I need ${neededConnections} more connetions.`
+        await Promise.all(candidates.map((candidate) => this.connectTo(candidate, reason)))
         return remaining
       }
     }
@@ -836,7 +859,7 @@ export class P2PTransport extends Transport {
             `Found a better candidate for connection, replacing ${worstPeer[1]} (${worstPeer[0]}) with ${bestCandidate} (${bestCandidateDistance})`
           )
           return async () => {
-            await this.connectTo(bestCandidate)
+            await this.connectTo(bestCandidate, 'There is a better candidate')
             return sortedCandidates
           }
         }
@@ -870,8 +893,8 @@ export class P2PTransport extends Transport {
     return packet.expireTime > 0 ? packet.expireTime : DEFAULT_MESSAGE_EXPIRATION_TIME
   }
 
-  async connectTo(known: KnownPeerData) {
-    return await this.mesh.connectTo(known.id)
+  async connectTo(known: KnownPeerData, reason: string) {
+    return this.mesh.connectTo(known.id, reason)
   }
 
   private disconnectFrom(peerId: string) {

@@ -1,7 +1,4 @@
-import { ILogger } from '../types'
-import { SendOpts, Transport } from '../Transport'
-import { StatisticsCollector } from '../statistics'
-
+import { Observable } from 'mz-observable'
 import {
   Room,
   RoomEvent,
@@ -9,9 +6,11 @@ import {
   RemoteTrackPublication,
   RemoteTrack,
   Participant,
-  DataPacket_Kind,
-  ConnectionState
+  DataPacket_Kind
 } from 'livekit-client'
+
+import { ILogger, SendOpts, TransportMessage, Position3D } from '../types'
+import { StatisticsCollector } from '../statistics'
 
 export type LivekitConfig = {
   logger: ILogger
@@ -22,7 +21,12 @@ export type LivekitConfig = {
   verbose: boolean
 }
 
-export class LivekitTransport extends Transport {
+export class LivekitTransport {
+  public readonly name = 'livekit'
+  public readonly peerId: string
+  public readonly islandId: string
+  public onDisconnectObservable = new Observable<void>()
+  public onMessageObservable = new Observable<TransportMessage>()
   private disconnected = false
   private room: Room
   private logger: ILogger
@@ -31,12 +35,13 @@ export class LivekitTransport extends Transport {
   private statisticsCollector: StatisticsCollector
 
   constructor({ logger, url, token, peerId, islandId, verbose }: LivekitConfig) {
-    super()
     this.logger = logger
     this.url = url
     this.token = token
     this.room = new Room()
-    this.statisticsCollector = new StatisticsCollector('livekit', peerId, islandId)
+    this.peerId = peerId
+    this.islandId = islandId
+    this.statisticsCollector = new StatisticsCollector()
 
     this.room
       .on(RoomEvent.TrackSubscribed, (_: RemoteTrack, __: RemoteTrackPublication, ___: RemoteParticipant) => {
@@ -47,11 +52,6 @@ export class LivekitTransport extends Transport {
       .on(RoomEvent.TrackUnsubscribed, (_: RemoteTrack, __: RemoteTrackPublication, ___: RemoteParticipant) => {
         if (verbose) {
           this.logger.log('track unsubscribed')
-        }
-      })
-      .on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
-        if (verbose) {
-          this.logger.log(`Connection State has changed ${state}`)
         }
       })
       .on(RoomEvent.Disconnected, () => {
@@ -72,6 +72,8 @@ export class LivekitTransport extends Transport {
   collectStatistics() {
     return this.statisticsCollector.collectStatistics()
   }
+
+  onPeerPositionChange(_: string, __: Position3D) {}
 
   async connect(): Promise<void> {
     await this.room.connect(this.url, this.token, { autoSubscribe: true })

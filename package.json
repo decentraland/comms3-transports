@@ -28,8 +28,8 @@
     "@microsoft/api-extractor": "^7.25.2",
     "@types/jest": "^27.0.1",
     "@typescript-eslint/eslint-plugin": "^5.28.0",
-    "@typescript-eslint/parser": "^5.28.0",
-    "eslint": "^8.16.0",
+    "@typescript-eslint/parser": "^5.29.0",
+    "eslint": "^8.18.0",
     "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-prettier": "^4.0.0",
     "jest": "^27.0.6",
@@ -43,9 +43,9 @@
   "dependencies": {
     "dotenv": "^16.0.1",
     "fp-future": "^1.0.1",
-    "livekit-client": "^1.0.3",
+    "livekit-client": "^0.18.4-RC8",
     "mz-observable": "^1.0.1",
-    "ts-proto": "^1.114.7"
+    "ts-proto": "^1.115.5"
   },
   "files": [
     "dist"

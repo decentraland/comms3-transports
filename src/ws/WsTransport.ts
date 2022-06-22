@@ -1,8 +1,8 @@
 import { Reader } from 'protobufjs/minimal'
+import { Observable } from 'mz-observable'
 
-import { ILogger } from '../types'
+import { ILogger, SendOpts, TransportMessage, Position3D } from '../types'
 import { StatisticsCollector } from '../statistics'
-import { Transport, SendOpts } from '../Transport'
 import { WsMessage } from '../proto/ws'
 
 export type WsConfig = {
@@ -12,7 +12,12 @@ export type WsConfig = {
   islandId: string
 }
 
-export class WsTransport extends Transport {
+export class WsTransport {
+  public readonly name = 'ws'
+  public readonly peerId: string
+  public readonly islandId: string
+  public onDisconnectObservable = new Observable<void>()
+  public onMessageObservable = new Observable<TransportMessage>()
   private aliases: Record<number, string> = {}
   private ws: WebSocket | null = null
   private logger: ILogger
@@ -20,11 +25,14 @@ export class WsTransport extends Transport {
   private statisticsCollector: StatisticsCollector
 
   constructor({ logger, url, peerId, islandId }: WsConfig) {
-    super()
+    this.peerId = peerId
+    this.islandId = islandId
     this.logger = logger
     this.url = url
-    this.statisticsCollector = new StatisticsCollector('ws', peerId, islandId)
+    this.statisticsCollector = new StatisticsCollector()
   }
+
+  onPeerPositionChange(_: string, __: Position3D) {}
 
   collectStatistics() {
     return this.statisticsCollector.collectStatistics()
@@ -32,7 +40,6 @@ export class WsTransport extends Transport {
 
   async connect(): Promise<void> {
     await this.connectWS()
-    // TODO maybe I need a heartbeat here
     this.logger.log('Connected')
   }
 

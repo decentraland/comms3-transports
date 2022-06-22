@@ -1,3 +1,52 @@
+import { Observable } from 'mz-observable'
+
+/**
+ * Transport Enum
+ * @public
+ */
+export type TransportName = 'livekit' | 'ws' | 'p2p' | 'dummy'
+
+/**
+ * Transport
+ * @public
+ */
+export type Transport = {
+  onDisconnectObservable: Observable<void>
+  onMessageObservable: Observable<TransportMessage>
+  name: TransportName
+  peerId: string
+  islandId: string
+
+  collectStatistics(): TransportStatistics
+
+  connect(): Promise<void>
+  send(msg: Uint8Array, opts: SendOpts): Promise<void>
+  disconnect(): Promise<void>
+
+  onPeerPositionChange(peerId: string, position: Position3D): void
+}
+
+/**
+ * A message from a transport
+ * @public
+ */
+export type TransportMessage = {
+  payload: Uint8Array
+  peer: string
+}
+
+/**
+ * A message from a transport
+ * NOTE: identity is a hint to the transport, the transport may choose to augment
+ * the message with peer identity data if the protocol itself doesn't have its
+ * own way of identifying the peer
+ * @public
+ */
+export type SendOpts = {
+  reliable: boolean
+  identity?: boolean
+}
+
 /**
  * Transport Statistics
  * @public
@@ -5,12 +54,10 @@
 export type TransportStatistics = {
   time: number
 
-  transport: string
-  peerId: string
-  islandId: string
-
   bytesSent: number
   bytesRecv: number
+
+  custom?: Record<string, any>
 }
 
 /**

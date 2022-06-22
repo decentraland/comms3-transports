@@ -1,13 +1,11 @@
 import { IslandChangedMessage } from './proto/archipelago'
-import { Transport } from './Transport'
-import { BFFConnection, ILogger, Position3D } from './types'
+import { BFFConnection, ILogger, Position3D, Transport } from './types'
 import { WsTransport } from './ws/WsTransport'
 import { LivekitTransport } from './livekit/LivekitTransport'
 import { P2PTransport, RelaySuspensionConfig } from './p2p/PeerToPeerTransport'
 
-export * from './Transport'
 export * from './DummyTransport'
-export { Position3D } from './types'
+export { TransportMessage, Position3D, TransportName, Transport } from './types'
 
 /**
  * Transports config
@@ -41,23 +39,24 @@ export function createTransport(
 
   const islandId = islandChangedMessage.islandId
 
-  let transport: Transport | null = null
   if (connStr.startsWith('ws-room:')) {
     const url = connStr.substring('ws-room:'.length)
-    transport = new WsTransport({
+    return new WsTransport({
       logger,
       url,
       peerId,
       islandId
     })
-  } else if (connStr.startsWith('livekit:')) {
+  }
+
+  if (connStr.startsWith('livekit:')) {
     const s = connStr.substring('livekit:'.length)
     const [url, params] = s.split('?')
     const token = new URLSearchParams(params).get('access_token')
     if (!token) {
       throw new Error('No access token')
     }
-    transport = new LivekitTransport({
+    return new LivekitTransport({
       logger,
       url,
       token,
@@ -65,14 +64,16 @@ export function createTransport(
       islandId,
       verbose: config.livekit.verbose
     })
-  } else if (connStr.startsWith('p2p:')) {
+  }
+
+  if (connStr.startsWith('p2p:')) {
     const peers = new Map<string, Position3D>()
     for (const [id, p] of Object.entries(islandChangedMessage.peers)) {
       if (peerId !== id) {
         peers.set(id, [p.x, p.y, p.z])
       }
     }
-    transport = new P2PTransport(
+    return new P2PTransport(
       {
         logger,
         bff,
@@ -85,5 +86,5 @@ export function createTransport(
     )
   }
 
-  return transport
+  return null
 }

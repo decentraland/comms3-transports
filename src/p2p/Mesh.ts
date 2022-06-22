@@ -57,12 +57,12 @@ export class Mesh {
     this.answerListener = await this.bff.addPeerTopicListener(`${this.peerId}.answer`, this.onAnswerListener.bind(this))
   }
 
-  public async connectTo(peerId: string): Promise<void> {
+  public async connectTo(peerId: string, reason: string): Promise<void> {
     if (this.initiatedConnections.has(peerId) || this.receivedConnections.has(peerId)) {
       return
     }
 
-    this.logger.log(`Connecting to ${peerId}`)
+    this.logger.log(`Connecting to ${peerId}. ${reason}`)
 
     const instance = this.createConnection(peerId)
     const conn: Connection = { instance, createTimestamp: Date.now() }
@@ -193,15 +193,18 @@ export class Mesh {
     })
   }
 
-  public sendPacketToPeer(peerId: string, data: Uint8Array): void {
+  public sendPacketToPeer(peerId: string, data: Uint8Array): boolean {
     let conn = this.initiatedConnections.get(peerId)
     if (conn && conn.dc && conn.dc.readyState === 'open') {
       conn.dc.send(data)
+      return true
     }
     conn = this.receivedConnections.get(peerId)
     if (conn && conn.dc && conn.dc.readyState === 'open') {
       conn.dc.send(data)
+      return true
     }
+    return false
   }
 
   async dispose(): Promise<void> {
@@ -259,6 +262,12 @@ export class Mesh {
         return
       }
 
+      const state = conn.instance.connectionState
+      if (state !== 'connecting' && state !== 'new') {
+        this.debugWebRtc(`No setting ice candidate for ${peerId}, connection is in state ${state}`)
+        return
+      }
+
       await conn.instance.addIceCandidate(candidate)
     } catch (e: any) {
       this.logger.error(`Failed to add ice candidate: ${e.toString()}`)
@@ -276,12 +285,12 @@ export class Mesh {
     const existentConnection = this.initiatedConnections.get(peerId)
     if (existentConnection) {
       if (this.peerId < peerId) {
-        this.logger.warn(`Both peers try to establish connection with each other ${peerId}, closing old connection`)
+        this.debugWebRtc(`Both peers try to establish connection with each other ${peerId}, closing old connection`)
         existentConnection.instance.close()
         this.initiatedConnections.delete(peerId)
         return
       }
-      this.logger.warn(`Both peers try to establish connection with each other ${peerId}, keeping this offer`)
+      this.debugWebRtc(`Both peers try to establish connection with each other ${peerId}, keeping this offer`)
     }
 
     const offer = JSON.parse(this.decoder.decode(data))
@@ -337,6 +346,12 @@ export class Mesh {
     this.debugWebRtc(`Got answer message from ${peerId}`)
     const conn = this.initiatedConnections.get(peerId)
     if (!conn) {
+      return
+    }
+
+    const state = conn.instance.connectionState
+    if (state !== 'connecting' && state !== 'new') {
+      this.debugWebRtc(`No setting remote description for ${peerId} connection is in state ${state}`)
       return
     }
 
