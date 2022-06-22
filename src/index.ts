@@ -33,7 +33,7 @@ export type TransportsConfig = {
 export function createTransport(
   config: TransportsConfig,
   islandChangedMessage: IslandChangedMessage
-): Transport | Transport | Transport | null {
+): Transport | null {
   const connStr = islandChangedMessage.connStr
   const { logger, peerId, bff } = config
 

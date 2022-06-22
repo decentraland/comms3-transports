@@ -10,7 +10,7 @@ import { Observable } from 'mz-observable';
 // Warning: (ae-forgotten-export) The symbol "IslandChangedMessage" needs to be exported by the entry point index.d.ts
 //
 // @public
-export function createTransport(config: TransportsConfig, islandChangedMessage: IslandChangedMessage): Transport | Transport | Transport | null;
+export function createTransport(config: TransportsConfig, islandChangedMessage: IslandChangedMessage): Transport | null;
 
 // @public
 export class DummyTransport {
