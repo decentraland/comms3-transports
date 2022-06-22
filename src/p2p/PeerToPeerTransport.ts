@@ -142,7 +142,6 @@ export class P2PTransport {
 
     let knownPeers = 0
     Object.keys(this.knownPeers).forEach((id) => {
-      console.log(id)
       knownPeers++
     })
 
@@ -482,7 +481,7 @@ export class P2PTransport {
         !this.isRelayFromConnectionSuspended(it.id, packet.src, now)
     )
 
-    this.logger.log(`${packet.src} is reachable through ${reachableThrough}`)
+    this.logger.log(`${packet.src} is reachable through ${JSON.stringify(reachableThrough)}`)
 
     // We only suspend if we will have at least 1 path of connection for this peer after suspensions
     if (reachableThrough.length > 1 || (reachableThrough.length === 1 && reachableThrough[0].id !== connectedPeerId)) {
