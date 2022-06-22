@@ -145,8 +145,24 @@ export class P2PTransport {
       knownPeers++
     })
 
+    let ownSuspendedRelays = 0
+    let theirSuspendedRelays = 0
+    Object.keys(this.peerRelayData).forEach((id) => {
+      const connected = this.peerRelayData[id]
+      // We expire peers suspensions
+      Object.keys(connected.ownSuspendedRelays).forEach((_) => {
+        ownSuspendedRelays++
+      })
+
+      Object.keys(connected.theirSuspendedRelays).forEach((_) => {
+        theirSuspendedRelays++
+      })
+    })
+
     s.custom = {
-      knownPeers
+      knownPeers,
+      ownSuspendedRelays,
+      theirSuspendedRelays
     }
     return s
   }
@@ -500,7 +516,9 @@ export class P2PTransport {
 
     // We only suspend if we will have at least 1 path of connection for this peer after suspensions
     if (reachableThrough.length > 1 || (reachableThrough.length === 1 && reachableThrough[0].id !== connectedPeerId)) {
-      this.logger.log(`Will add suspension for ${packet.src} -> ${connectedPeerId}`)
+      if (this.config.verbose) {
+        this.logger.log(`Will add suspension for ${packet.src} -> ${connectedPeerId}`)
+      }
       relayData.pendingSuspensionRequests.push(packet.src)
     }
   }
