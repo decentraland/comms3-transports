@@ -43,7 +43,7 @@
   "dependencies": {
     "dotenv": "^16.0.1",
     "fp-future": "^1.0.1",
-    "livekit-client": "^0.18.4-RC8",
+    "livekit-client": "^1.1.2",
     "mz-observable": "^1.0.1",
     "ts-proto": "^1.115.5"
   },
