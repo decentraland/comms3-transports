@@ -285,12 +285,12 @@ export class Mesh {
     const existentConnection = this.initiatedConnections.get(peerId)
     if (existentConnection) {
       if (this.peerId < peerId) {
-        this.logger.warn(`Both peers try to establish connection with each other ${peerId}, closing old connection`)
+        this.debugWebRtc(`Both peers try to establish connection with each other ${peerId}, closing old connection`)
         existentConnection.instance.close()
         this.initiatedConnections.delete(peerId)
         return
       }
-      this.logger.warn(`Both peers try to establish connection with each other ${peerId}, keeping this offer`)
+      this.debugWebRtc(`Both peers try to establish connection with each other ${peerId}, keeping this offer`)
     }
 
     const offer = JSON.parse(this.decoder.decode(data))
