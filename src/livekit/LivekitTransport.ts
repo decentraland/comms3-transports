@@ -24,6 +24,8 @@ export type LivekitConfig = {
 
 export class LivekitTransport {
   public readonly name = 'livekit'
+  public readonly peerId: string
+  public readonly islandId: string
   public onDisconnectObservable = new Observable<void>()
   public onMessageObservable = new Observable<TransportMessage>()
   private disconnected = false
@@ -38,7 +40,9 @@ export class LivekitTransport {
     this.url = url
     this.token = token
     this.room = new Room()
-    this.statisticsCollector = new StatisticsCollector(peerId, islandId)
+    this.peerId = peerId
+    this.islandId = islandId
+    this.statisticsCollector = new StatisticsCollector()
 
     this.room
       .on(RoomEvent.TrackSubscribed, (_: RemoteTrack, __: RemoteTrackPublication, ___: RemoteParticipant) => {

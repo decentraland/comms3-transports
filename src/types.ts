@@ -1,3 +1,5 @@
+import { Observable } from 'mz-observable'
+
 /**
  * Transport Enum
  * @public
@@ -9,7 +11,13 @@ export type TransportName = 'livekit' | 'ws' | 'p2p' | 'dummy'
  * @public
  */
 export type Transport = {
+  onDisconnectObservable: Observable<void>
+  onMessageObservable: Observable<TransportMessage>
   name: TransportName
+  peerId: string
+  islandId: string
+
+  collectStatistics(): TransportStatistics
 
   connect(): Promise<void>
   send(msg: Uint8Array, opts: SendOpts): Promise<void>
@@ -46,18 +54,11 @@ export type SendOpts = {
 export type TransportStatistics = {
   time: number
 
-  peerId: string
-  islandId: string
-
   bytesSent: number
   bytesRecv: number
-}
 
-export type P2POnlyStatistics = TransportStatistics & {
-  knownPeersCount: number
+  custom?: Record<string, any>
 }
-
-export type P2PStatistics = P2POnlyStatistics & TransportStatistics
 
 /**
  * Position

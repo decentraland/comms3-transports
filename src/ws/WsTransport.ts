@@ -14,6 +14,8 @@ export type WsConfig = {
 
 export class WsTransport {
   public readonly name = 'ws'
+  public readonly peerId: string
+  public readonly islandId: string
   public onDisconnectObservable = new Observable<void>()
   public onMessageObservable = new Observable<TransportMessage>()
   private aliases: Record<number, string> = {}
@@ -23,9 +25,11 @@ export class WsTransport {
   private statisticsCollector: StatisticsCollector
 
   constructor({ logger, url, peerId, islandId }: WsConfig) {
+    this.peerId = peerId
+    this.islandId = islandId
     this.logger = logger
     this.url = url
-    this.statisticsCollector = new StatisticsCollector(peerId, islandId)
+    this.statisticsCollector = new StatisticsCollector()
   }
 
   onPeerPositionChange(_: string, __: Position3D) {}
@@ -36,7 +40,6 @@ export class WsTransport {
 
   async connect(): Promise<void> {
     await this.connectWS()
-    // TODO maybe I need a heartbeat here
     this.logger.log('Connected')
   }
 

@@ -50,14 +50,14 @@ const DEFAULT_MAX_CONNECTIONS = 6
 const DEFAULT_MESSAGE_EXPIRATION_TIME = 10000
 
 export class P2PTransport {
-  public mesh: Mesh
-  public readonly peerId: string
   public readonly name = 'p2p'
+  public readonly peerId: string
+  public readonly islandId: string
+  public mesh: Mesh
   public onDisconnectObservable = new Observable<void>()
   public onMessageObservable = new Observable<TransportMessage>()
 
   private statisticsCollector: StatisticsCollector
-  private islandId: string
   private logger: ILogger
   private bffConnection: BFFConnection
   private distance: (l1: Position3D, l2: Position3D) => number
@@ -84,7 +84,7 @@ export class P2PTransport {
     this.islandId = this.config.islandId
     this.bffConnection = this.config.bff
     this.config.verbose = this.config.verbose
-    this.statisticsCollector = new StatisticsCollector(this.peerId, this.islandId)
+    this.statisticsCollector = new StatisticsCollector()
 
     this.mesh = new Mesh(this.bffConnection, this.peerId, {
       logger: this.logger,
@@ -138,7 +138,18 @@ export class P2PTransport {
   }
 
   collectStatistics() {
-    return this.statisticsCollector.collectStatistics()
+    const s = this.statisticsCollector.collectStatistics()
+
+    let knownPeers = 0
+    Object.keys(this.knownPeers).forEach((id) => {
+      console.log(id)
+      knownPeers++
+    })
+
+    s.custom = {
+      knownPeers
+    }
+    return s
   }
 
   onPeerPositionChange(peerId: string, p: Position3D) {

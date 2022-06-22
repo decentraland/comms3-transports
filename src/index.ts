@@ -5,7 +5,7 @@ import { LivekitTransport } from './livekit/LivekitTransport'
 import { P2PTransport, RelaySuspensionConfig } from './p2p/PeerToPeerTransport'
 
 export * from './DummyTransport'
-export { Position3D, TransportName, Transport } from './types'
+export { TransportMessage, Position3D, TransportName, Transport } from './types'
 
 /**
  * Transports config

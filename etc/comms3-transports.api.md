@@ -17,8 +17,6 @@ export class DummyTransport {
     // (undocumented)
     collectStatistics(): {
         time: number;
-        peerId: string;
-        islandId: string;
         bytesSent: number;
         bytesRecv: number;
     };
@@ -27,13 +25,17 @@ export class DummyTransport {
     // (undocumented)
     disconnect(): Promise<void>;
     // (undocumented)
+    readonly islandId = "none";
+    // (undocumented)
     readonly name = "dummy";
     // (undocumented)
     onDisconnectObservable: Observable<void>;
-    // Warning: (ae-forgotten-export) The symbol "TransportMessage" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     onMessageObservable: Observable<TransportMessage>;
+    // (undocumented)
+    onPeerPositionChange(_: string, __: Position3D): void;
+    // (undocumented)
+    readonly peerId = "none";
     // (undocumented)
     send(): Promise<void>;
 }
@@ -43,11 +45,22 @@ export type Position3D = [number, number, number];
 
 // @public
 export type Transport = {
+    onDisconnectObservable: Observable<void>;
+    onMessageObservable: Observable<TransportMessage>;
     name: TransportName;
+    peerId: string;
+    islandId: string;
+    collectStatistics(): TransportStatistics;
     connect(): Promise<void>;
     send(msg: Uint8Array, opts: SendOpts): Promise<void>;
     disconnect(): Promise<void>;
     onPeerPositionChange(peerId: string, position: Position3D): void;
+};
+
+// @public
+export type TransportMessage = {
+    payload: Uint8Array;
+    peer: string;
 };
 
 // @public
@@ -74,7 +87,8 @@ export type TransportsConfig = {
 // src/index.ts:15:3 - (ae-forgotten-export) The symbol "ILogger" needs to be exported by the entry point index.d.ts
 // src/index.ts:16:3 - (ae-forgotten-export) The symbol "BFFConnection" needs to be exported by the entry point index.d.ts
 // src/index.ts:25:5 - (ae-forgotten-export) The symbol "RelaySuspensionConfig" needs to be exported by the entry point index.d.ts
-// src/types.ts:15:3 - (ae-forgotten-export) The symbol "SendOpts" needs to be exported by the entry point index.d.ts
+// src/types.ts:20:3 - (ae-forgotten-export) The symbol "TransportStatistics" needs to be exported by the entry point index.d.ts
+// src/types.ts:23:3 - (ae-forgotten-export) The symbol "SendOpts" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
