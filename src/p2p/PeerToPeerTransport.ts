@@ -141,7 +141,7 @@ export class P2PTransport {
     const s = this.statisticsCollector.collectStatistics()
 
     let knownPeers = 0
-    Object.keys(this.knownPeers).forEach((id) => {
+    Object.keys(this.knownPeers).forEach((_) => {
       knownPeers++
     })
 
@@ -788,13 +788,8 @@ export class P2PTransport {
           this.logger.log(`Picked connection candidates ${JSON.stringify(candidates)} `)
         }
 
-        await Promise.all(
-          candidates.map((candidate) =>
-            this.connectTo(candidate).catch((e) =>
-              this.logger.log(`Error connecting to candidate ${candidate} ${e.toString()}`)
-            )
-          )
-        )
+        const reason = `I need ${neededConnections} more connetions.`
+        await Promise.all(candidates.map((candidate) => this.connectTo(candidate, reason)))
         return remaining
       }
     }
@@ -831,7 +826,7 @@ export class P2PTransport {
             `Found a better candidate for connection, replacing ${worstPeer[1]} (${worstPeer[0]}) with ${bestCandidate} (${bestCandidateDistance})`
           )
           return async () => {
-            await this.connectTo(bestCandidate)
+            await this.connectTo(bestCandidate, 'There is a better candidate')
             return sortedCandidates
           }
         }
@@ -865,8 +860,8 @@ export class P2PTransport {
     return packet.expireTime > 0 ? packet.expireTime : DEFAULT_MESSAGE_EXPIRATION_TIME
   }
 
-  async connectTo(known: KnownPeerData) {
-    return await this.mesh.connectTo(known.id)
+  async connectTo(known: KnownPeerData, reason: string) {
+    return this.mesh.connectTo(known.id, reason)
   }
 
   private disconnectFrom(peerId: string) {

@@ -57,12 +57,12 @@ export class Mesh {
     this.answerListener = await this.bff.addPeerTopicListener(`${this.peerId}.answer`, this.onAnswerListener.bind(this))
   }
 
-  public async connectTo(peerId: string): Promise<void> {
+  public async connectTo(peerId: string, reason: string): Promise<void> {
     if (this.initiatedConnections.has(peerId) || this.receivedConnections.has(peerId)) {
       return
     }
 
-    this.logger.log(`Connecting to ${peerId}`)
+    this.logger.log(`Connecting to ${peerId}. ${reason}`)
 
     const instance = this.createConnection(peerId)
     const conn: Connection = { instance, createTimestamp: Date.now() }
