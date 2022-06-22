@@ -281,7 +281,7 @@ export class P2PTransport {
         this.processPacket(packet)
       } else {
         if (peerId === packet.src) {
-          this.logger.warn(`Requesting relay suspension for direct packet`)
+          this.logger.warn(`Requesting relay suspension for direct packet ${alreadyReceived} ${expired}`)
         }
 
         this.requestRelaySuspension(packet, peerId)
