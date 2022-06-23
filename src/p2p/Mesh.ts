@@ -12,7 +12,7 @@ export const defaultIceServers = [
 type Config = {
   logger: ILogger
   packetHandler: (data: Uint8Array, peerId: string) => void
-  isKnownPeer(peerId: string): boolean
+  shouldAcceptOffer(peerId: string): boolean
   debugWebRtcEnabled: boolean
 }
 
@@ -28,7 +28,7 @@ export class Mesh {
   private logger: ILogger
   private debugWebRtcEnabled: boolean
   private packetHandler: (data: Uint8Array, peerId: string) => void
-  private isKnownPeer: (peerId: string) => boolean
+  private shouldAcceptOffer: (peerId: string) => boolean
   private initiatedConnections = new Map<string, Connection>()
   private receivedConnections = new Map<string, Connection>()
   private candidatesListener: TopicListener | null = null
@@ -40,11 +40,11 @@ export class Mesh {
   constructor(
     private bff: BFFConnection,
     private peerId: string,
-    { logger, packetHandler, isKnownPeer, debugWebRtcEnabled }: Config
+    { logger, packetHandler, shouldAcceptOffer, debugWebRtcEnabled }: Config
   ) {
     this.logger = logger
     this.packetHandler = packetHandler
-    this.isKnownPeer = isKnownPeer
+    this.shouldAcceptOffer = shouldAcceptOffer
     this.debugWebRtcEnabled = debugWebRtcEnabled
   }
 
@@ -116,6 +116,10 @@ export class Mesh {
       }
     })
     return count
+  }
+
+  public connectionsCount(): number {
+    return this.initiatedConnections.size + this.receivedConnections.size
   }
 
   public disconnectFrom(peerId: string): void {
@@ -275,8 +279,7 @@ export class Mesh {
   }
 
   private async onOfferMessage(data: Uint8Array, peerId: string) {
-    if (!this.isKnownPeer(peerId)) {
-      this.logger.log(`Reject offer from unkown peer ${peerId}`)
+    if (!this.shouldAcceptOffer(peerId)) {
       return
     }
 
