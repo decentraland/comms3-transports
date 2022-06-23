@@ -814,7 +814,7 @@ export class P2PTransport {
   }
 
   private calculateNextNetworkOperation(connectionCandidates: KnownPeerData[]): NetworkOperation | undefined {
-    if (this.config.debugUpdateNetwork) {
+    if (this.config.verbose) {
       this.logger.log(`Calculating network operation with candidates ${JSON.stringify(connectionCandidates)}`)
     }
 
