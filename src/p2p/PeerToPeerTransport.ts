@@ -788,7 +788,7 @@ export class P2PTransport {
         this.mesh.connectionsCount() < DEFAULT_MAX_CONNECTIONS
       ) {
         if (this.config.debugUpdateNetwork) {
-          this.logger.log('Establishing connections to reach target')
+          this.logger.log(`Establishing connections to reach target. I need ${neededConnections} more connections`)
         }
         const [candidates, remaining] = pickBy(connectionCandidates, neededConnections, this.peerSortCriteria())
 
@@ -796,9 +796,6 @@ export class P2PTransport {
           this.logger.log(`Picked connection candidates ${JSON.stringify(candidates)} `)
         }
 
-        if (this.config.debugUpdateNetwork) {
-          this.logger.log(`I need ${neededConnections} more connections, I have ${candidates.length} candidates`)
-        }
         const reason = 'I need more connections.'
         await Promise.all(candidates.map((candidate) => this.connectTo(candidate, reason)))
         connectionCandidates = remaining
