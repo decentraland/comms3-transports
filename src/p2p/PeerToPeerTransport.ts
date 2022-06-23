@@ -778,13 +778,39 @@ export class P2PTransport {
         return typeof distance !== 'undefined' && distance <= MAX_CONNECTION_DISTANCE
       })
 
+      // NOTE(hugo): this operation used to be part of calculateNextNetworkOperation
+      // but that was wrong, since no new connected peers will be added after a given iteration
+      const neededConnections = DEFAULT_TARGET_CONNECTIONS - this.mesh.connectedCount()
+      // If we need to establish new connections because we are below the target, we do that
+      if (
+        neededConnections > 0 &&
+        connectionCandidates.length > 0 &&
+        this.mesh.connectionsCount() < DEFAULT_MAX_CONNECTIONS
+      ) {
+        if (this.config.debugUpdateNetwork) {
+          this.logger.log('Establishing connections to reach target')
+        }
+        const [candidates, remaining] = pickBy(connectionCandidates, neededConnections, this.peerSortCriteria())
+
+        if (this.config.verbose) {
+          this.logger.log(`Picked connection candidates ${JSON.stringify(candidates)} `)
+        }
+
+        if (this.config.debugUpdateNetwork) {
+          this.logger.log(`I need ${neededConnections} more connections, I have ${candidates.length} candidates`)
+        }
+        const reason = 'I need more connections.'
+        await Promise.all(candidates.map((candidate) => this.connectTo(candidate, reason)))
+        connectionCandidates = remaining
+      }
+
       let operation: NetworkOperation | undefined
       while ((operation = this.calculateNextNetworkOperation(connectionCandidates))) {
         try {
           connectionCandidates = await operation()
         } catch (e) {
           // We may want to invalidate the operation or something to avoid repeating the same mistake
-          this.logger.log(`Error performing operation ${operation} ${e} `)
+          this.logger.log(`Error performing operation ${operation} ${e}`)
         }
       }
     } finally {
@@ -797,6 +823,8 @@ export class P2PTransport {
   }
 
   private peerSortCriteria() {
+    // We are going to be calculating the distance to each of the candidates. This could be costly, but since the state could have changed after every operation,
+    // we need to ensure that the value is updated. If known peers is kept under maybe 2k elements, it should be no problem.
     return (peer1: KnownPeerData, peer2: KnownPeerData) => {
       // We prefer those peers that have position over those that don't
       if (peer1.position && !peer2.position) return -1
@@ -819,38 +847,6 @@ export class P2PTransport {
     }
 
     const peerSortCriteria = this.peerSortCriteria()
-
-    const pickCandidates = (count: number) => {
-      // We are going to be calculating the distance to each of the candidates. This could be costly, but since the state could have changed after every operation,
-      // we need to ensure that the value is updated. If known peers is kept under maybe 2k elements, it should be no problem.
-      return pickBy(connectionCandidates, count, peerSortCriteria)
-    }
-
-    const neededConnections = DEFAULT_TARGET_CONNECTIONS - this.mesh.connectedCount()
-    // If we need to establish new connections because we are below the target, we do that
-    if (
-      neededConnections > 0 &&
-      connectionCandidates.length > 0 &&
-      this.mesh.connectionsCount() < DEFAULT_MAX_CONNECTIONS
-    ) {
-      if (this.config.verbose) {
-        this.logger.log('Establishing connections to reach target')
-      }
-      return async () => {
-        const [candidates, remaining] = pickCandidates(neededConnections)
-
-        if (this.config.verbose) {
-          this.logger.log(`Picked connection candidates ${JSON.stringify(candidates)} `)
-        }
-
-        if (this.config.debugUpdateNetwork) {
-          this.logger.log(`I need ${neededConnections} more connections, I have ${candidates.length} candidates`)
-        }
-        const reason = 'I need more connections.'
-        await Promise.all(candidates.map((candidate) => this.connectTo(candidate, reason)))
-        return remaining
-      }
-    }
 
     // If we are over the max amount of connections, we discard the "worst"
     const toDisconnect = this.mesh.connectedCount() - DEFAULT_MAX_CONNECTIONS
