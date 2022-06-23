@@ -268,6 +268,7 @@ export class Mesh {
         return
       }
 
+      console.log({ msg: 'add ice', state: conn.instance.connectionState, signaling: conn.instance.signalingState })
       await conn.instance.addIceCandidate(candidate)
     } catch (e: any) {
       this.logger.error(`Failed to add ice candidate: ${e.toString()}`)
