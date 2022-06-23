@@ -326,12 +326,15 @@ export class Mesh {
     })
 
     try {
+      console.log({ msg: 'set remote', state: instance.connectionState, signaling: instance.signalingState })
       this.debugWebRtc(`Setting remote description for ${peerId}`)
       await instance.setRemoteDescription(offer)
 
+      console.log({ msg: 'create answer', state: instance.connectionState, signaling: instance.signalingState })
       this.debugWebRtc(`Creating answer for ${peerId}`)
       const answer = await instance.createAnswer()
 
+      console.log({ msg: 'set local', state: instance.connectionState, signaling: instance.signalingState })
       this.debugWebRtc(`Setting local description for ${peerId}`)
       await instance.setLocalDescription(answer)
 
