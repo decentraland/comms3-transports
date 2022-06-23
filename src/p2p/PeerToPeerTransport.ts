@@ -68,7 +68,7 @@ export class P2PTransport {
   private currentMessageId: number = 0
   private instanceId: number
   private expireTimeoutId: NodeJS.Timeout | number
-  private updateNetworkTimeoutId: NodeJS.Timeout | number
+  private updateNetworkTimeoutId: NodeJS.Timeout | number | null = null
   private pingTimeoutId?: NodeJS.Timeout | number
   private disposed: boolean = false
   private activePings: Record<string, ActivePing> = {}
@@ -83,13 +83,32 @@ export class P2PTransport {
     this.peerId = this.config.peerId
     this.islandId = this.config.islandId
     this.bffConnection = this.config.bff
-    this.config.verbose = this.config.verbose
     this.statisticsCollector = new StatisticsCollector()
 
     this.mesh = new Mesh(this.bffConnection, this.peerId, {
       logger: this.logger,
       packetHandler: this.handlePeerPacket.bind(this),
-      isKnownPeer: this.isKnownPeer.bind(this),
+      shouldAcceptOffer: (peerId: string) => {
+        if (this.disposed) {
+          return false
+        }
+
+        if (!this.isKnownPeer(peerId)) {
+          if (this.config.verbose) {
+            this.logger.log('Rejecting offer from unknown peer')
+          }
+          return false
+        }
+
+        if (this.mesh.connectedCount() >= DEFAULT_TARGET_CONNECTIONS) {
+          if (this.config.verbose) {
+            this.logger.log('Rejecting offer, already enough connections')
+          }
+          return false
+        }
+
+        return true
+      },
       debugWebRtcEnabled: this.config.debugWebRtcEnabled ?? false
     })
 
@@ -105,15 +124,8 @@ export class P2PTransport {
         }
       }, EXPIRATION_LOOP_INTERVAL)
 
-    const scheduleUpdateNetwork = () =>
-      setTimeout(() => {
-        this.triggerUpdateNetwork('scheduled network update')
-        this.updateNetworkTimeoutId = scheduleUpdateNetwork()
-      }, UPDATE_NETWORK_INTERVAL)
-
     this.expireTimeoutId = scheduleExpiration()
-    this.updateNetworkTimeoutId = scheduleUpdateNetwork()
-
+    this.scheduleUpdateNetwork()
     // if (this.config.pingInterval) {
     //   const schedulePing = () =>
     //     setTimeout(async () => {
@@ -237,7 +249,9 @@ export class P2PTransport {
     if (this.disposed) return
 
     this.disposed = true
-    clearTimeout(this.updateNetworkTimeoutId as any)
+    if (this.updateNetworkTimeoutId) {
+      clearTimeout(this.updateNetworkTimeoutId as any)
+    }
     clearTimeout(this.expireTimeoutId as any)
     clearTimeout(this.pingTimeoutId as any)
 
@@ -277,7 +291,6 @@ export class P2PTransport {
 
       const packetKey = `${packet.src}_${packet.instanceId}_${packet.sequenceId}`
       const alreadyReceived = !!this.receivedPackets[packetKey]
-      const expired = this.checkExpired(packet)
 
       this.ensureAndUpdateKnownPeer(packet, peerId)
 
@@ -289,6 +302,8 @@ export class P2PTransport {
           expirationTime: this.getExpireTime(packet)
         }
       }
+
+      const expired = this.checkExpired(packet)
 
       if (packet.hops >= 1) {
         this.countRelay(peerId, packet, expired, alreadyReceived)
@@ -716,10 +731,23 @@ export class P2PTransport {
     }
   }
 
+  private scheduleUpdateNetwork() {
+    if (this.disposed) {
+      return
+    }
+    if (this.updateNetworkTimeoutId) {
+      clearTimeout(this.updateNetworkTimeoutId)
+    }
+    this.updateNetworkTimeoutId = setTimeout(() => {
+      this.triggerUpdateNetwork('scheduled network update')
+    }, UPDATE_NETWORK_INTERVAL)
+  }
+
   private triggerUpdateNetwork(event: string) {
     this.updateNetwork(event).catch((e) => {
       this.logger.warn(`Error updating network after ${event}, ${e} `)
     })
+    this.scheduleUpdateNetwork()
   }
 
   private isConnectedTo(peerId: string): boolean {
@@ -810,7 +838,11 @@ export class P2PTransport {
 
     const neededConnections = DEFAULT_TARGET_CONNECTIONS - this.mesh.connectedCount()
     // If we need to establish new connections because we are below the target, we do that
-    if (neededConnections > 0 && connectionCandidates.length > 0) {
+    if (
+      neededConnections > 0 &&
+      connectionCandidates.length > 0 &&
+      this.mesh.connectionsCount() < DEFAULT_MAX_CONNECTIONS
+    ) {
       if (this.config.verbose) {
         this.logger.log('Establishing connections to reach target')
       }
