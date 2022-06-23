@@ -268,7 +268,6 @@ export class Mesh {
         return
       }
 
-      console.log({ msg: 'add ice', state: conn.instance.connectionState, signaling: conn.instance.signalingState })
       await conn.instance.addIceCandidate(candidate)
     } catch (e: any) {
       this.logger.error(`Failed to add ice candidate: ${e.toString()}`)
@@ -326,15 +325,12 @@ export class Mesh {
     })
 
     try {
-      console.log({ msg: 'set remote', state: instance.connectionState, signaling: instance.signalingState })
       this.debugWebRtc(`Setting remote description for ${peerId}`)
       await instance.setRemoteDescription(offer)
 
-      console.log({ msg: 'create answer', state: instance.connectionState, signaling: instance.signalingState })
       this.debugWebRtc(`Creating answer for ${peerId}`)
       const answer = await instance.createAnswer()
 
-      console.log({ msg: 'set local', state: instance.connectionState, signaling: instance.signalingState })
       this.debugWebRtc(`Setting local description for ${peerId}`)
       await instance.setLocalDescription(answer)
 

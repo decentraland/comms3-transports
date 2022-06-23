@@ -292,7 +292,6 @@ export class P2PTransport {
 
       const packetKey = `${packet.src}_${packet.instanceId}_${packet.sequenceId}`
       const alreadyReceived = !!this.receivedPackets[packetKey]
-      const expired = this.checkExpired(packet)
 
       this.ensureAndUpdateKnownPeer(packet, peerId)
 
@@ -304,6 +303,8 @@ export class P2PTransport {
           expirationTime: this.getExpireTime(packet)
         }
       }
+
+      const expired = this.checkExpired(packet)
 
       if (packet.hops >= 1) {
         this.countRelay(peerId, packet, expired, alreadyReceived)
