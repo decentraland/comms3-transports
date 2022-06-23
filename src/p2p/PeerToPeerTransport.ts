@@ -24,6 +24,7 @@ export type P2PConfig = {
   relaySuspensionConfig?: RelaySuspensionConfig
   verbose: boolean
   debugWebRtcEnabled: boolean
+  debugUpdateNetwork: boolean
   islandId: string
   peerId: string
   logger: ILogger
@@ -762,7 +763,7 @@ export class P2PTransport {
     try {
       this.updatingNetwork = true
 
-      if (this.config.verbose) {
+      if (this.config.debugUpdateNetwork) {
         this.logger.log(`Updating network because of event "${event}"...`)
       }
 
@@ -787,7 +788,7 @@ export class P2PTransport {
         }
       }
     } finally {
-      if (this.config.verbose) {
+      if (this.config.debugUpdateNetwork) {
         this.logger.log('Network update finished')
       }
 
@@ -813,7 +814,7 @@ export class P2PTransport {
   }
 
   private calculateNextNetworkOperation(connectionCandidates: KnownPeerData[]): NetworkOperation | undefined {
-    if (this.config.verbose) {
+    if (this.config.debugUpdateNetwork) {
       this.logger.log(`Calculating network operation with candidates ${JSON.stringify(connectionCandidates)}`)
     }
 
@@ -842,7 +843,9 @@ export class P2PTransport {
           this.logger.log(`Picked connection candidates ${JSON.stringify(candidates)} `)
         }
 
-        this.logger.log(`I need ${neededConnections} more connections, I have ${candidates.length} candidates`)
+        if (this.config.debugUpdateNetwork) {
+          this.logger.log(`I need ${neededConnections} more connections, I have ${candidates.length} candidates`)
+        }
         const reason = 'I need more connections.'
         await Promise.all(candidates.map((candidate) => this.connectTo(candidate, reason)))
         return remaining

@@ -22,6 +22,7 @@ export type TransportsConfig = {
   p2p: {
     verbose: boolean
     debugWebRtcEnabled: boolean
+    debugUpdateNetwork: boolean
     relaySuspensionConfig?: RelaySuspensionConfig
   }
 }
