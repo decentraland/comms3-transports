@@ -89,7 +89,22 @@ export class P2PTransport {
     this.mesh = new Mesh(this.bffConnection, this.peerId, {
       logger: this.logger,
       packetHandler: this.handlePeerPacket.bind(this),
-      isKnownPeer: this.isKnownPeer.bind(this),
+      shouldAcceptOffer: (peerId: string) => {
+        if (!this.isKnownPeer(peerId)) {
+          if (this.config.verbose) {
+            this.logger.log('Rejecting offer from unknown peer')
+          }
+          return false
+        }
+        if (this.mesh.connectedCount() >= DEFAULT_MAX_CONNECTIONS) {
+          if (this.config.verbose) {
+            this.logger.log('Rejecting offer, already enough connections')
+          }
+          return false
+        }
+
+        return true
+      },
       debugWebRtcEnabled: this.config.debugWebRtcEnabled ?? false
     })
 
