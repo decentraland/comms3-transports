@@ -118,6 +118,10 @@ export class Mesh {
     return count
   }
 
+  public connectionsCount(): number {
+    return this.initiatedConnections.size + this.receivedConnections.size
+  }
+
   public disconnectFrom(peerId: string): void {
     this.logger.log(`Disconnecting from ${peerId}`)
     let conn = this.initiatedConnections.get(peerId)

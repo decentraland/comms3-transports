@@ -83,7 +83,6 @@ export class P2PTransport {
     this.peerId = this.config.peerId
     this.islandId = this.config.islandId
     this.bffConnection = this.config.bff
-    this.config.verbose = this.config.verbose
     this.statisticsCollector = new StatisticsCollector()
 
     this.mesh = new Mesh(this.bffConnection, this.peerId, {
@@ -100,7 +99,8 @@ export class P2PTransport {
           }
           return false
         }
-        if (this.mesh.connectedCount() >= DEFAULT_MAX_CONNECTIONS) {
+
+        if (this.mesh.connectedCount() >= DEFAULT_TARGET_CONNECTIONS) {
           if (this.config.verbose) {
             this.logger.log('Rejecting offer, already enough connections')
           }
@@ -838,7 +838,11 @@ export class P2PTransport {
 
     const neededConnections = DEFAULT_TARGET_CONNECTIONS - this.mesh.connectedCount()
     // If we need to establish new connections because we are below the target, we do that
-    if (neededConnections > 0 && connectionCandidates.length > 0) {
+    if (
+      neededConnections > 0 &&
+      connectionCandidates.length > 0 &&
+      this.mesh.connectionsCount() < DEFAULT_MAX_CONNECTIONS
+    ) {
       if (this.config.verbose) {
         this.logger.log('Establishing connections to reach target')
       }
