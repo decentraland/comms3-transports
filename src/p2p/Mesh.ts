@@ -25,6 +25,7 @@ type Connection = {
 const PEER_CONNECT_TIMEOUT = 3500
 
 export class Mesh {
+  private disposed = false
   private logger: ILogger
   private debugWebRtcEnabled: boolean
   private packetHandler: (data: Uint8Array, peerId: string) => void
@@ -212,6 +213,8 @@ export class Mesh {
   }
 
   async dispose(): Promise<void> {
+    if (this.disposed) return
+    this.disposed = true
     if (this.candidatesListener) {
       await this.bff.removePeerTopicListener(this.candidatesListener)
     }
@@ -258,6 +261,7 @@ export class Mesh {
   }
 
   private async onCandidateMessage(data: Uint8Array, peerId: string) {
+    if (this.disposed) return
     try {
       const { candidate, initiator } = JSON.parse(this.decoder.decode(data))
 
@@ -279,6 +283,7 @@ export class Mesh {
   }
 
   private async onOfferMessage(data: Uint8Array, peerId: string) {
+    if (this.disposed) return
     if (!this.shouldAcceptOffer(peerId)) {
       return
     }
@@ -346,6 +351,7 @@ export class Mesh {
   }
 
   private async onAnswerListener(data: Uint8Array, peerId: string) {
+    if (this.disposed) return
     this.debugWebRtc(`Got answer message from ${peerId}`)
     const conn = this.initiatedConnections.get(peerId)
     if (!conn) {

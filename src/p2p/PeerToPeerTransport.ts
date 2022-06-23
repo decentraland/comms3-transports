@@ -115,8 +115,17 @@ export class P2PTransport {
     const scheduleExpiration = () =>
       setTimeout(() => {
         try {
-          this.expireMessages()
-          this.expirePeers()
+          const currentTimestamp = Date.now()
+
+          Object.keys(this.receivedPackets).forEach((id) => {
+            const received = this.receivedPackets[id]
+            if (currentTimestamp - received.timestamp > received.expirationTime) {
+              delete this.receivedPackets[id]
+            }
+          })
+
+          this.expireKnownPeers(currentTimestamp)
+          this.expirePeerRelayData(currentTimestamp)
         } catch (e) {
           this.logger.error(`Couldn't expire messages ${e}`)
         } finally {
@@ -330,7 +339,7 @@ export class P2PTransport {
   }
 
   private processPacket(packet: Packet) {
-    this.updateTimeStamp(packet.src, packet.subtype, this.getTimestamp(packet), packet.sequenceId)
+    this.updateTimeStamp(packet.src, packet.subtype, packet.timestamp, packet.sequenceId)
 
     packet.hops += 1
 
@@ -366,26 +375,6 @@ export class P2PTransport {
         this.processSuspensionRequest(packet.src, suspendRelayData)
       }
     }
-  }
-
-  private expireMessages() {
-    const currentTimestamp = Date.now()
-
-    const keys = Object.keys(this.receivedPackets)
-
-    keys.forEach((id) => {
-      const received = this.receivedPackets[id]
-      if (currentTimestamp - received.timestamp > received.expirationTime) {
-        delete this.receivedPackets[id]
-      }
-    })
-  }
-
-  private expirePeers() {
-    const currentTimestamp = Date.now()
-
-    this.expireKnownPeers(currentTimestamp)
-    this.expirePeerRelayData(currentTimestamp)
   }
 
   private expirePeerRelayData(currentTimestamp: number) {
@@ -602,7 +591,7 @@ export class P2PTransport {
     const expireTime = this.getExpireTime(packet)
 
     if (this.knownPeers[packet.src].timestamp) {
-      discardedByExpireTime = this.knownPeers[packet.src].timestamp! - this.getTimestamp(packet) > expireTime
+      discardedByExpireTime = this.knownPeers[packet.src].timestamp! - packet.timestamp > expireTime
     }
 
     return discardedByOlderThan || discardedByExpireTime
@@ -613,7 +602,7 @@ export class P2PTransport {
       const subtypeData = this.knownPeers[packet.src]?.subtypeData[packet.subtype]
       return (
         subtypeData &&
-        subtypeData.lastTimestamp - this.getTimestamp(packet) > packet.discardOlderThan &&
+        subtypeData.lastTimestamp - packet.timestamp > packet.discardOlderThan &&
         subtypeData.lastSequenceId >= packet.sequenceId
       )
     }
@@ -853,7 +842,8 @@ export class P2PTransport {
           this.logger.log(`Picked connection candidates ${JSON.stringify(candidates)} `)
         }
 
-        const reason = `I need ${neededConnections} more connetions.`
+        this.logger.log(`I need ${neededConnections} more connections, I have ${candidates.length} candidates`)
+        const reason = 'I need more connections.'
         await Promise.all(candidates.map((candidate) => this.connectTo(candidate, reason)))
         return remaining
       }
@@ -959,9 +949,5 @@ export class P2PTransport {
 
   private removeKnownPeer(peerId: string) {
     delete this.knownPeers[peerId]
-  }
-
-  private getTimestamp(packet: Packet) {
-    return packet.timestamp
   }
 }
