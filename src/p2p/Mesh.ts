@@ -1,4 +1,5 @@
 import { ILogger, BFFConnection, TopicListener } from '../types'
+import { P2PLogConfig } from './types'
 
 export const defaultIceServers = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -13,7 +14,7 @@ type Config = {
   logger: ILogger
   packetHandler: (data: Uint8Array, peerId: string) => void
   shouldAcceptOffer(peerId: string): boolean
-  debugWebRtcEnabled: boolean
+  logConfig: P2PLogConfig
 }
 
 type Connection = {
@@ -25,8 +26,8 @@ type Connection = {
 const PEER_CONNECT_TIMEOUT = 3500
 
 export class Mesh {
+  private disposed = false
   private logger: ILogger
-  private debugWebRtcEnabled: boolean
   private packetHandler: (data: Uint8Array, peerId: string) => void
   private shouldAcceptOffer: (peerId: string) => boolean
   private initiatedConnections = new Map<string, Connection>()
@@ -34,18 +35,19 @@ export class Mesh {
   private candidatesListener: TopicListener | null = null
   private answerListener: TopicListener | null = null
   private offerListener: TopicListener | null = null
+  private logConfig: P2PLogConfig
   private encoder = new TextEncoder()
   private decoder = new TextDecoder()
 
   constructor(
     private bff: BFFConnection,
     private peerId: string,
-    { logger, packetHandler, shouldAcceptOffer, debugWebRtcEnabled }: Config
+    { logger, packetHandler, shouldAcceptOffer, logConfig }: Config
   ) {
     this.logger = logger
     this.packetHandler = packetHandler
     this.shouldAcceptOffer = shouldAcceptOffer
-    this.debugWebRtcEnabled = debugWebRtcEnabled
+    this.logConfig = logConfig
   }
 
   public async registerSubscriptions() {
@@ -212,6 +214,8 @@ export class Mesh {
   }
 
   async dispose(): Promise<void> {
+    if (this.disposed) return
+    this.disposed = true
     if (this.candidatesListener) {
       await this.bff.removePeerTopicListener(this.candidatesListener)
     }
@@ -258,6 +262,7 @@ export class Mesh {
   }
 
   private async onCandidateMessage(data: Uint8Array, peerId: string) {
+    if (this.disposed) return
     try {
       const { candidate, initiator } = JSON.parse(this.decoder.decode(data))
 
@@ -279,6 +284,7 @@ export class Mesh {
   }
 
   private async onOfferMessage(data: Uint8Array, peerId: string) {
+    if (this.disposed) return
     if (!this.shouldAcceptOffer(peerId)) {
       return
     }
@@ -346,6 +352,7 @@ export class Mesh {
   }
 
   private async onAnswerListener(data: Uint8Array, peerId: string) {
+    if (this.disposed) return
     this.debugWebRtc(`Got answer message from ${peerId}`)
     const conn = this.initiatedConnections.get(peerId)
     if (!conn) {
@@ -368,7 +375,7 @@ export class Mesh {
   }
 
   private debugWebRtc(message: string) {
-    if (this.debugWebRtcEnabled) {
+    if (this.logConfig.debugWebRtcEnabled) {
       this.logger.log(message)
     }
   }
