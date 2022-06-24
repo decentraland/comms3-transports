@@ -2,6 +2,12 @@ import { IFuture } from 'fp-future'
 
 import { Position3D } from '../types'
 
+export type P2PLogConfig = {
+  verbose: boolean
+  debugWebRtcEnabled: boolean
+  debugUpdateNetwork: boolean
+}
+
 export type ReceivedRelayData = {
   hops: number
   total: number

@@ -6,13 +6,18 @@ import { TransportMessage, BFFConnection, TopicListener, Position3D, ILogger, Se
 import { StatisticsCollector } from '../statistics'
 import { JoinIslandMessage, LeftIslandMessage } from '../proto/archipelago'
 import { SuspendRelayData, PingData, PongData, Packet, MessageData } from '../proto/p2p'
-
 import { Mesh } from './Mesh'
 import { pickBy, randomUint32, discretizedPositionDistanceXZ } from './utils'
-
 import { PeerMessageType, PongMessageType, PingMessageType, PeerMessageTypes, SuspendRelayType } from './messageTypes'
-
-import { PeerRelayData, PingResult, MinPeerData, NetworkOperation, KnownPeerData, ActivePing } from './types'
+import {
+  P2PLogConfig,
+  PeerRelayData,
+  PingResult,
+  MinPeerData,
+  NetworkOperation,
+  KnownPeerData,
+  ActivePing
+} from './types'
 
 export type RelaySuspensionConfig = {
   relaySuspensionInterval: number
@@ -22,13 +27,11 @@ export type RelaySuspensionConfig = {
 export type P2PConfig = {
   selfPosition: () => Position3D | undefined
   relaySuspensionConfig?: RelaySuspensionConfig
-  verbose: boolean
-  debugWebRtcEnabled: boolean
-  debugUpdateNetwork: boolean
   islandId: string
   peerId: string
   logger: ILogger
   bff: BFFConnection
+  logConfig: P2PLogConfig
 }
 
 type PacketData = {
@@ -54,10 +57,13 @@ export class P2PTransport {
   public readonly name = 'p2p'
   public readonly peerId: string
   public readonly islandId: string
-  public mesh: Mesh
+  public readonly mesh: Mesh
+  public logConfig: P2PLogConfig
   public onDisconnectObservable = new Observable<void>()
   public onMessageObservable = new Observable<TransportMessage>()
 
+  private selfPosition: () => Position3D | undefined
+  private relaySuspensionConfig?: RelaySuspensionConfig
   private statisticsCollector: StatisticsCollector
   private logger: ILogger
   private bffConnection: BFFConnection
@@ -77,14 +83,17 @@ export class P2PTransport {
   private onPeerJoinedListener: TopicListener | null = null
   private onPeerLeftListener: TopicListener | null = null
 
-  constructor(private config: P2PConfig, peers: Map<string, Position3D>) {
+  constructor(config: P2PConfig, peers: Map<string, Position3D>) {
     this.distance = discretizedPositionDistanceXZ()
     this.instanceId = randomUint32()
-    this.logger = this.config.logger
-    this.peerId = this.config.peerId
-    this.islandId = this.config.islandId
-    this.bffConnection = this.config.bff
+    this.logger = config.logger
+    this.peerId = config.peerId
+    this.islandId = config.islandId
+    this.bffConnection = config.bff
     this.statisticsCollector = new StatisticsCollector()
+    this.relaySuspensionConfig = config.relaySuspensionConfig
+    this.selfPosition = config.selfPosition
+    this.logConfig = config.logConfig
 
     this.mesh = new Mesh(this.bffConnection, this.peerId, {
       logger: this.logger,
@@ -95,14 +104,14 @@ export class P2PTransport {
         }
 
         if (!this.isKnownPeer(peerId)) {
-          if (this.config.verbose) {
+          if (this.logConfig.verbose) {
             this.logger.log('Rejecting offer from unknown peer')
           }
           return false
         }
 
         if (this.mesh.connectedCount() >= DEFAULT_TARGET_CONNECTIONS) {
-          if (this.config.verbose) {
+          if (this.logConfig.verbose) {
             this.logger.log('Rejecting offer, already enough connections')
           }
           return false
@@ -110,7 +119,7 @@ export class P2PTransport {
 
         return true
       },
-      debugWebRtcEnabled: this.config.debugWebRtcEnabled ?? false
+      logConfig: this.logConfig
     })
 
     const scheduleExpiration = () =>
@@ -324,7 +333,7 @@ export class P2PTransport {
       } else {
         if (peerId === packet.src) {
           // NOTE(hugo): not part of the original implementation
-          if (this.config.verbose) {
+          if (this.logConfig.verbose) {
             this.logger.log(
               `Skip requesting relay suspension for direct packet, already received: ${alreadyReceived}, expired: ${expired}`
             )
@@ -454,44 +463,47 @@ export class P2PTransport {
   }
 
   private requestRelaySuspension(packet: Packet, peerId: string) {
-    const suspensionConfig = this.config.relaySuspensionConfig
-    if (suspensionConfig) {
-      // First we update pending suspensions requests, adding the new one if needed
-      this.consolidateSuspensionRequest(packet, peerId)
+    if (!this.relaySuspensionConfig) {
+      return
+    }
 
-      const now = Date.now()
+    const { relaySuspensionDuration } = this.relaySuspensionConfig
 
-      const relayData = this.getPeerRelayData(peerId)
+    // First we update pending suspensions requests, adding the new one if needed
+    this.consolidateSuspensionRequest(packet, peerId)
 
-      const lastSuspension = relayData.lastRelaySuspensionTimestamp
+    const now = Date.now()
 
-      // We only send suspensions requests if more time than the configured interval has passed since last time
-      if (lastSuspension && now - lastSuspension > suspensionConfig.relaySuspensionInterval) {
-        const suspendRelayData = {
-          relayedPeers: relayData.pendingSuspensionRequests,
-          durationMillis: suspensionConfig.relaySuspensionDuration
-        }
+    const relayData = this.getPeerRelayData(peerId)
 
-        if (this.config.verbose) {
-          this.logger.log(`Requesting relay suspension to ${peerId} ${JSON.stringify(suspendRelayData)}`)
-        }
+    const lastSuspension = relayData.lastRelaySuspensionTimestamp
 
-        const packet = this.buildPacketWithData(SuspendRelayType, {
-          suspendRelayData
-        })
-
-        this.sendPacketToPeer(peerId, Packet.encode(packet).finish())
-
-        suspendRelayData.relayedPeers.forEach((relayedPeerId) => {
-          relayData.theirSuspendedRelays[relayedPeerId] = Date.now() + suspensionConfig.relaySuspensionDuration
-        })
-
-        relayData.pendingSuspensionRequests = []
-        relayData.lastRelaySuspensionTimestamp = now
-      } else if (!lastSuspension) {
-        // We skip the first suspension to give time to populate the structures
-        relayData.lastRelaySuspensionTimestamp = now
+    // We only send suspensions requests if more time than the configured interval has passed since last time
+    if (lastSuspension && now - lastSuspension > this.relaySuspensionConfig.relaySuspensionInterval) {
+      const suspendRelayData = {
+        relayedPeers: relayData.pendingSuspensionRequests,
+        durationMillis: relaySuspensionDuration
       }
+
+      if (this.logConfig.verbose) {
+        this.logger.log(`Requesting relay suspension to ${peerId} ${JSON.stringify(suspendRelayData)}`)
+      }
+
+      const packet = this.buildPacketWithData(SuspendRelayType, {
+        suspendRelayData
+      })
+
+      this.sendPacketToPeer(peerId, Packet.encode(packet).finish())
+
+      suspendRelayData.relayedPeers.forEach((relayedPeerId) => {
+        relayData.theirSuspendedRelays[relayedPeerId] = Date.now() + relaySuspensionDuration
+      })
+
+      relayData.pendingSuspensionRequests = []
+      relayData.lastRelaySuspensionTimestamp = now
+    } else if (!lastSuspension) {
+      // We skip the first suspension to give time to populate the structures
+      relayData.lastRelaySuspensionTimestamp = now
     }
   }
 
@@ -502,7 +514,7 @@ export class P2PTransport {
       return
     }
 
-    if (this.config.verbose) {
+    if (this.logConfig.verbose) {
       this.logger.log(`Consolidating suspension for ${packet.src}->${connectedPeerId}`)
     }
 
@@ -516,13 +528,13 @@ export class P2PTransport {
         !this.isRelayFromConnectionSuspended(it.id, packet.src, now)
     )
 
-    if (this.config.verbose) {
+    if (this.logConfig.verbose) {
       this.logger.log(`${packet.src} is reachable through ${JSON.stringify(reachableThrough)}`)
     }
 
     // We only suspend if we will have at least 1 path of connection for this peer after suspensions
     if (reachableThrough.length > 1 || (reachableThrough.length === 1 && reachableThrough[0].id !== connectedPeerId)) {
-      if (this.config.verbose) {
+      if (this.logConfig.verbose) {
         this.logger.log(`Will add suspension for ${packet.src} -> ${connectedPeerId}`)
       }
       relayData.pendingSuspensionRequests.push(packet.src)
@@ -763,7 +775,7 @@ export class P2PTransport {
     try {
       this.updatingNetwork = true
 
-      if (this.config.debugUpdateNetwork) {
+      if (this.logConfig.debugUpdateNetwork) {
         this.logger.log(`Updating network because of event "${event}"...`)
       }
 
@@ -787,12 +799,12 @@ export class P2PTransport {
         connectionCandidates.length > 0 &&
         this.mesh.connectionsCount() < DEFAULT_MAX_CONNECTIONS
       ) {
-        if (this.config.debugUpdateNetwork) {
+        if (this.logConfig.debugUpdateNetwork) {
           this.logger.log(`Establishing connections to reach target. I need ${neededConnections} more connections`)
         }
         const [candidates, remaining] = pickBy(connectionCandidates, neededConnections, this.peerSortCriteria())
 
-        if (this.config.verbose) {
+        if (this.logConfig.verbose) {
           this.logger.log(`Picked connection candidates ${JSON.stringify(candidates)} `)
         }
 
@@ -811,7 +823,7 @@ export class P2PTransport {
         }
       }
     } finally {
-      if (this.config.debugUpdateNetwork) {
+      if (this.logConfig.debugUpdateNetwork) {
         this.logger.log('Network update finished')
       }
 
@@ -839,7 +851,7 @@ export class P2PTransport {
   }
 
   private calculateNextNetworkOperation(connectionCandidates: KnownPeerData[]): NetworkOperation | undefined {
-    if (this.config.verbose) {
+    if (this.logConfig.verbose) {
       this.logger.log(`Calculating network operation with candidates ${JSON.stringify(connectionCandidates)}`)
     }
 
@@ -901,7 +913,7 @@ export class P2PTransport {
   }
 
   private distanceTo(peerId: string) {
-    const position = this.config.selfPosition()
+    const position = this.selfPosition()
     if (this.knownPeers[peerId]?.position && position) {
       return this.distance(position, this.knownPeers[peerId].position!)
     }

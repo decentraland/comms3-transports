@@ -20,9 +20,11 @@ export type TransportsConfig = {
     verbose: boolean
   }
   p2p: {
-    verbose: boolean
-    debugWebRtcEnabled: boolean
-    debugUpdateNetwork: boolean
+    logConfig: {
+      verbose: boolean
+      debugWebRtcEnabled: boolean
+      debugUpdateNetwork: boolean
+    }
     relaySuspensionConfig?: RelaySuspensionConfig
   }
 }
