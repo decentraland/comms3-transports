@@ -176,24 +176,8 @@ export class P2PTransport {
       knownPeers++
     })
 
-    let ownSuspendedRelays = 0
-    let theirSuspendedRelays = 0
-    Object.keys(this.peerRelayData).forEach((id) => {
-      const connected = this.peerRelayData[id]
-      // We expire peers suspensions
-      Object.keys(connected.ownSuspendedRelays).forEach((_) => {
-        ownSuspendedRelays++
-      })
-
-      Object.keys(connected.theirSuspendedRelays).forEach((_) => {
-        theirSuspendedRelays++
-      })
-    })
-
     s.custom = {
-      knownPeers,
-      ownSuspendedRelays,
-      theirSuspendedRelays
+      knownPeers
     }
     return s
   }
@@ -371,18 +355,36 @@ export class P2PTransport {
         break
       }
       case 'pingData': {
-        const { pingData } = packet.data
-        this.respondPing(pingData.pingId)
+        const { pingId } = packet.data.pingData
+
+        // TODO: Maybe we should add a destination and handle this message as unicast
+        const pongPacket = this.buildPacketWithData(PongMessageType, { pongData: { pingId } })
+        pongPacket.expireTime = DEFAULT_PING_TIMEOUT
+        this.sendPacket(pongPacket)
         break
       }
       case 'pongData': {
-        const { pongData } = packet.data
-        this.processPong(packet.src, pongData.pingId)
+        const { pingId } = packet.data.pongData
+        const now = performance.now()
+        const activePing = this.activePings[pingId]
+        if (activePing && activePing.startTime) {
+          const elapsed = now - activePing.startTime
+
+          const knownPeer = this.addKnownPeerIfNotExists({ id: packet.src })
+          knownPeer.latency = elapsed
+
+          activePing.results.push({ peerId: packet.src, latency: elapsed })
+        }
         break
       }
       case 'suspendRelayData': {
         const { suspendRelayData } = packet.data
-        this.processSuspensionRequest(packet.src, suspendRelayData)
+        if (this.mesh.hasConnectionsFor(packet.src)) {
+          const relayData = this.getPeerRelayData(packet.src)
+          suspendRelayData.relayedPeers.forEach((it) => {
+            relayData.ownSuspendedRelays[it] = Date.now() + suspendRelayData.durationMillis
+          })
+        }
       }
     }
   }
@@ -451,15 +453,6 @@ export class P2PTransport {
     }
 
     return this.peerRelayData[peerId]
-  }
-
-  private processSuspensionRequest(peerId: string, suspendRelayData: SuspendRelayData) {
-    if (this.mesh.hasConnectionsFor(peerId)) {
-      const relayData = this.getPeerRelayData(peerId)
-      suspendRelayData.relayedPeers.forEach(
-        (it) => (relayData.ownSuspendedRelays[it] = Date.now() + suspendRelayData.durationMillis)
-      )
-    }
   }
 
   private requestRelaySuspension(packet: Packet, peerId: string) {
@@ -573,28 +566,6 @@ export class P2PTransport {
     if (expired || alreadyReceived) {
       receivedRelayData.discarded += 1
     }
-  }
-
-  private processPong(peerId: string, pingId: number) {
-    const now = performance.now()
-    const activePing = this.activePings[pingId]
-    if (activePing && activePing.startTime) {
-      const elapsed = now - activePing.startTime
-
-      const knownPeer = this.addKnownPeerIfNotExists({ id: peerId })
-      knownPeer.latency = elapsed
-
-      activePing.results.push({ peerId, latency: elapsed })
-    }
-  }
-
-  private respondPing(pingId: number) {
-    const pongData = { pingId }
-
-    // TODO: Maybe we should add a destination and handle this message as unicast
-    const packet = this.buildPacketWithData(PongMessageType, { pongData })
-    packet.expireTime = DEFAULT_PING_TIMEOUT
-    this.sendPacket(packet)
   }
 
   private checkExpired(packet: Packet) {
