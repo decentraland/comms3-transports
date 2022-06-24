@@ -36,12 +36,15 @@ describe('p2p', () => {
     return new P2PTransport(
       {
         selfPosition: () => [0, 0, 0],
-        verbose: false,
-        debugWebRtcEnabled: true,
         bff: new InMemoryBFFClient(peerId, bff),
         logger,
         peerId,
-        islandId
+        islandId,
+        logConfig: {
+          verbose: false,
+          debugWebRtcEnabled: false,
+          debugUpdateNetwork: false
+        }
       },
       peers
     )

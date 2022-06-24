@@ -6,13 +6,18 @@ import { TransportMessage, BFFConnection, TopicListener, Position3D, ILogger, Se
 import { StatisticsCollector } from '../statistics'
 import { JoinIslandMessage, LeftIslandMessage } from '../proto/archipelago'
 import { SuspendRelayData, PingData, PongData, Packet, MessageData } from '../proto/p2p'
-
 import { Mesh } from './Mesh'
 import { pickBy, randomUint32, discretizedPositionDistanceXZ } from './utils'
-
 import { PeerMessageType, PongMessageType, PingMessageType, PeerMessageTypes, SuspendRelayType } from './messageTypes'
-
-import { PeerRelayData, PingResult, MinPeerData, NetworkOperation, KnownPeerData, ActivePing } from './types'
+import {
+  P2PLogConfig,
+  PeerRelayData,
+  PingResult,
+  MinPeerData,
+  NetworkOperation,
+  KnownPeerData,
+  ActivePing
+} from './types'
 
 export type RelaySuspensionConfig = {
   relaySuspensionInterval: number
@@ -22,12 +27,11 @@ export type RelaySuspensionConfig = {
 export type P2PConfig = {
   selfPosition: () => Position3D | undefined
   relaySuspensionConfig?: RelaySuspensionConfig
-  verbose: boolean
-  debugWebRtcEnabled: boolean
   islandId: string
   peerId: string
   logger: ILogger
   bff: BFFConnection
+  logConfig: P2PLogConfig
 }
 
 type PacketData = {
@@ -53,10 +57,13 @@ export class P2PTransport {
   public readonly name = 'p2p'
   public readonly peerId: string
   public readonly islandId: string
-  public mesh: Mesh
+  public readonly mesh: Mesh
+  public logConfig: P2PLogConfig
   public onDisconnectObservable = new Observable<void>()
   public onMessageObservable = new Observable<TransportMessage>()
 
+  private selfPosition: () => Position3D | undefined
+  private relaySuspensionConfig?: RelaySuspensionConfig
   private statisticsCollector: StatisticsCollector
   private logger: ILogger
   private bffConnection: BFFConnection
@@ -76,14 +83,17 @@ export class P2PTransport {
   private onPeerJoinedListener: TopicListener | null = null
   private onPeerLeftListener: TopicListener | null = null
 
-  constructor(private config: P2PConfig, peers: Map<string, Position3D>) {
+  constructor(config: P2PConfig, peers: Map<string, Position3D>) {
     this.distance = discretizedPositionDistanceXZ()
     this.instanceId = randomUint32()
-    this.logger = this.config.logger
-    this.peerId = this.config.peerId
-    this.islandId = this.config.islandId
-    this.bffConnection = this.config.bff
+    this.logger = config.logger
+    this.peerId = config.peerId
+    this.islandId = config.islandId
+    this.bffConnection = config.bff
     this.statisticsCollector = new StatisticsCollector()
+    this.relaySuspensionConfig = config.relaySuspensionConfig
+    this.selfPosition = config.selfPosition
+    this.logConfig = config.logConfig
 
     this.mesh = new Mesh(this.bffConnection, this.peerId, {
       logger: this.logger,
@@ -94,14 +104,14 @@ export class P2PTransport {
         }
 
         if (!this.isKnownPeer(peerId)) {
-          if (this.config.verbose) {
+          if (this.logConfig.verbose) {
             this.logger.log('Rejecting offer from unknown peer')
           }
           return false
         }
 
         if (this.mesh.connectedCount() >= DEFAULT_TARGET_CONNECTIONS) {
-          if (this.config.verbose) {
+          if (this.logConfig.verbose) {
             this.logger.log('Rejecting offer, already enough connections')
           }
           return false
@@ -109,14 +119,23 @@ export class P2PTransport {
 
         return true
       },
-      debugWebRtcEnabled: this.config.debugWebRtcEnabled ?? false
+      logConfig: this.logConfig
     })
 
     const scheduleExpiration = () =>
       setTimeout(() => {
         try {
-          this.expireMessages()
-          this.expirePeers()
+          const currentTimestamp = Date.now()
+
+          Object.keys(this.receivedPackets).forEach((id) => {
+            const received = this.receivedPackets[id]
+            if (currentTimestamp - received.timestamp > received.expirationTime) {
+              delete this.receivedPackets[id]
+            }
+          })
+
+          this.expireKnownPeers(currentTimestamp)
+          this.expirePeerRelayData(currentTimestamp)
         } catch (e) {
           this.logger.error(`Couldn't expire messages ${e}`)
         } finally {
@@ -157,24 +176,8 @@ export class P2PTransport {
       knownPeers++
     })
 
-    let ownSuspendedRelays = 0
-    let theirSuspendedRelays = 0
-    Object.keys(this.peerRelayData).forEach((id) => {
-      const connected = this.peerRelayData[id]
-      // We expire peers suspensions
-      Object.keys(connected.ownSuspendedRelays).forEach((_) => {
-        ownSuspendedRelays++
-      })
-
-      Object.keys(connected.theirSuspendedRelays).forEach((_) => {
-        theirSuspendedRelays++
-      })
-    })
-
     s.custom = {
-      knownPeers,
-      ownSuspendedRelays,
-      theirSuspendedRelays
+      knownPeers
     }
     return s
   }
@@ -271,7 +274,9 @@ export class P2PTransport {
     if (this.disposed) {
       return
     }
-    const t = reliable ? PeerMessageTypes.reliable('data') : PeerMessageTypes.unreliable('data')
+
+    const subtype = 'data'
+    const t = reliable ? PeerMessageTypes.reliable(subtype) : PeerMessageTypes.unreliable(subtype)
 
     const messageData = { room: this.islandId, payload, dst: [] }
     const packet = this.buildPacketWithData(t, { messageData })
@@ -288,22 +293,37 @@ export class P2PTransport {
     this.statisticsCollector.onBytesRecv(data.length)
     try {
       const packet = Packet.decode(Reader.create(data))
-
+      const now = Date.now()
       const packetKey = `${packet.src}_${packet.instanceId}_${packet.sequenceId}`
       const alreadyReceived = !!this.receivedPackets[packetKey]
 
-      this.ensureAndUpdateKnownPeer(packet, peerId)
+      this.addKnownPeerIfNotExists({ id: packet.src })
 
-      if (packet.discardOlderThan !== 0) {
+      this.knownPeers[packet.src].reachableThrough[peerId] = {
+        id: peerId,
+        hops: packet.hops + 1,
+        timestamp: now
+      }
+
+      const expirationTime = this.getExpireTime(packet)
+      let expired = now - packet.timestamp > expirationTime
+
+      if (!expired && packet.discardOlderThan >= 0 && packet.subtype) {
+        const subtypeData = this.knownPeers[packet.src]?.subtypeData[packet.subtype]
+        expired =
+          subtypeData &&
+          subtypeData.lastTimestamp - packet.timestamp > packet.discardOlderThan &&
+          subtypeData.lastSequenceId >= packet.sequenceId
+      }
+
+      if (!expired && packet.discardOlderThan !== 0) {
         // If discardOlderThan is zero, then we don't need to store the package.
         // Same or older packages will be instantly discarded
         this.receivedPackets[packetKey] = {
-          timestamp: Date.now(),
-          expirationTime: this.getExpireTime(packet)
+          timestamp: now,
+          expirationTime
         }
       }
-
-      const expired = this.checkExpired(packet)
 
       if (packet.hops >= 1) {
         this.countRelay(peerId, packet, expired, alreadyReceived)
@@ -314,7 +334,7 @@ export class P2PTransport {
       } else {
         if (peerId === packet.src) {
           // NOTE(hugo): not part of the original implementation
-          if (this.config.verbose) {
+          if (this.logConfig.verbose) {
             this.logger.log(
               `Skip requesting relay suspension for direct packet, already received: ${alreadyReceived}, expired: ${expired}`
             )
@@ -330,7 +350,16 @@ export class P2PTransport {
   }
 
   private processPacket(packet: Packet) {
-    this.updateTimeStamp(packet.src, packet.subtype, this.getTimestamp(packet), packet.sequenceId)
+    const knownPeer = this.knownPeers[packet.src]
+    knownPeer.lastUpdated = Date.now()
+    knownPeer.timestamp = Math.max(knownPeer.timestamp ?? Number.MIN_SAFE_INTEGER, packet.timestamp)
+    if (packet.subtype) {
+      const lastData = knownPeer.subtypeData[packet.subtype]
+      knownPeer.subtypeData[packet.subtype] = {
+        lastTimestamp: Math.max(lastData?.lastTimestamp ?? Number.MIN_SAFE_INTEGER, packet.timestamp),
+        lastSequenceId: Math.max(lastData?.lastSequenceId ?? Number.MIN_SAFE_INTEGER, packet.sequenceId)
+      }
+    }
 
     packet.hops += 1
 
@@ -352,40 +381,38 @@ export class P2PTransport {
         break
       }
       case 'pingData': {
-        const { pingData } = packet.data
-        this.respondPing(pingData.pingId)
+        const { pingId } = packet.data.pingData
+
+        // TODO: Maybe we should add a destination and handle this message as unicast
+        const pongPacket = this.buildPacketWithData(PongMessageType, { pongData: { pingId } })
+        pongPacket.expireTime = DEFAULT_PING_TIMEOUT
+        this.sendPacket(pongPacket)
         break
       }
       case 'pongData': {
-        const { pongData } = packet.data
-        this.processPong(packet.src, pongData.pingId)
+        const { pingId } = packet.data.pongData
+        const now = performance.now()
+        const activePing = this.activePings[pingId]
+        if (activePing && activePing.startTime) {
+          const elapsed = now - activePing.startTime
+
+          const knownPeer = this.addKnownPeerIfNotExists({ id: packet.src })
+          knownPeer.latency = elapsed
+
+          activePing.results.push({ peerId: packet.src, latency: elapsed })
+        }
         break
       }
       case 'suspendRelayData': {
         const { suspendRelayData } = packet.data
-        this.processSuspensionRequest(packet.src, suspendRelayData)
+        if (this.mesh.hasConnectionsFor(packet.src)) {
+          const relayData = this.getPeerRelayData(packet.src)
+          suspendRelayData.relayedPeers.forEach((it) => {
+            relayData.ownSuspendedRelays[it] = Date.now() + suspendRelayData.durationMillis
+          })
+        }
       }
     }
-  }
-
-  private expireMessages() {
-    const currentTimestamp = Date.now()
-
-    const keys = Object.keys(this.receivedPackets)
-
-    keys.forEach((id) => {
-      const received = this.receivedPackets[id]
-      if (currentTimestamp - received.timestamp > received.expirationTime) {
-        delete this.receivedPackets[id]
-      }
-    })
-  }
-
-  private expirePeers() {
-    const currentTimestamp = Date.now()
-
-    this.expireKnownPeers(currentTimestamp)
-    this.expirePeerRelayData(currentTimestamp)
   }
 
   private expirePeerRelayData(currentTimestamp: number) {
@@ -428,19 +455,6 @@ export class P2PTransport {
     })
   }
 
-  private updateTimeStamp(peerId: string, subtype: string | undefined, timestamp: number, sequenceId: number) {
-    const knownPeer = this.knownPeers[peerId]
-    knownPeer.lastUpdated = Date.now()
-    knownPeer.timestamp = Math.max(knownPeer.timestamp ?? Number.MIN_SAFE_INTEGER, timestamp)
-    if (subtype) {
-      const lastData = knownPeer.subtypeData[subtype]
-      knownPeer.subtypeData[subtype] = {
-        lastTimestamp: Math.max(lastData?.lastTimestamp ?? Number.MIN_SAFE_INTEGER, timestamp),
-        lastSequenceId: Math.max(lastData?.lastSequenceId ?? Number.MIN_SAFE_INTEGER, sequenceId)
-      }
-    }
-  }
-
   private getPeerRelayData(peerId: string) {
     if (!this.peerRelayData[peerId]) {
       this.peerRelayData[peerId] = {
@@ -454,54 +468,48 @@ export class P2PTransport {
     return this.peerRelayData[peerId]
   }
 
-  private processSuspensionRequest(peerId: string, suspendRelayData: SuspendRelayData) {
-    if (this.mesh.hasConnectionsFor(peerId)) {
-      const relayData = this.getPeerRelayData(peerId)
-      suspendRelayData.relayedPeers.forEach(
-        (it) => (relayData.ownSuspendedRelays[it] = Date.now() + suspendRelayData.durationMillis)
-      )
-    }
-  }
-
   private requestRelaySuspension(packet: Packet, peerId: string) {
-    const suspensionConfig = this.config.relaySuspensionConfig
-    if (suspensionConfig) {
-      // First we update pending suspensions requests, adding the new one if needed
-      this.consolidateSuspensionRequest(packet, peerId)
+    if (!this.relaySuspensionConfig) {
+      return
+    }
 
-      const now = Date.now()
+    const { relaySuspensionDuration } = this.relaySuspensionConfig
 
-      const relayData = this.getPeerRelayData(peerId)
+    // First we update pending suspensions requests, adding the new one if needed
+    this.consolidateSuspensionRequest(packet, peerId)
 
-      const lastSuspension = relayData.lastRelaySuspensionTimestamp
+    const now = Date.now()
 
-      // We only send suspensions requests if more time than the configured interval has passed since last time
-      if (lastSuspension && now - lastSuspension > suspensionConfig.relaySuspensionInterval) {
-        const suspendRelayData = {
-          relayedPeers: relayData.pendingSuspensionRequests,
-          durationMillis: suspensionConfig.relaySuspensionDuration
-        }
+    const relayData = this.getPeerRelayData(peerId)
 
-        if (this.config.verbose) {
-          this.logger.log(`Requesting relay suspension to ${peerId} ${JSON.stringify(suspendRelayData)}`)
-        }
+    const lastSuspension = relayData.lastRelaySuspensionTimestamp
 
-        const packet = this.buildPacketWithData(SuspendRelayType, {
-          suspendRelayData
-        })
-
-        this.sendPacketToPeer(peerId, Packet.encode(packet).finish())
-
-        suspendRelayData.relayedPeers.forEach((relayedPeerId) => {
-          relayData.theirSuspendedRelays[relayedPeerId] = Date.now() + suspensionConfig.relaySuspensionDuration
-        })
-
-        relayData.pendingSuspensionRequests = []
-        relayData.lastRelaySuspensionTimestamp = now
-      } else if (!lastSuspension) {
-        // We skip the first suspension to give time to populate the structures
-        relayData.lastRelaySuspensionTimestamp = now
+    // We only send suspensions requests if more time than the configured interval has passed since last time
+    if (lastSuspension && now - lastSuspension > this.relaySuspensionConfig.relaySuspensionInterval) {
+      const suspendRelayData = {
+        relayedPeers: relayData.pendingSuspensionRequests,
+        durationMillis: relaySuspensionDuration
       }
+
+      if (this.logConfig.verbose) {
+        this.logger.log(`Requesting relay suspension to ${peerId} ${JSON.stringify(suspendRelayData)}`)
+      }
+
+      const packet = this.buildPacketWithData(SuspendRelayType, {
+        suspendRelayData
+      })
+
+      this.sendPacketToPeer(peerId, Packet.encode(packet).finish())
+
+      suspendRelayData.relayedPeers.forEach((relayedPeerId) => {
+        relayData.theirSuspendedRelays[relayedPeerId] = Date.now() + relaySuspensionDuration
+      })
+
+      relayData.pendingSuspensionRequests = []
+      relayData.lastRelaySuspensionTimestamp = now
+    } else if (!lastSuspension) {
+      // We skip the first suspension to give time to populate the structures
+      relayData.lastRelaySuspensionTimestamp = now
     }
   }
 
@@ -512,7 +520,7 @@ export class P2PTransport {
       return
     }
 
-    if (this.config.verbose) {
+    if (this.logConfig.verbose) {
       this.logger.log(`Consolidating suspension for ${packet.src}->${connectedPeerId}`)
     }
 
@@ -526,13 +534,13 @@ export class P2PTransport {
         !this.isRelayFromConnectionSuspended(it.id, packet.src, now)
     )
 
-    if (this.config.verbose) {
+    if (this.logConfig.verbose) {
       this.logger.log(`${packet.src} is reachable through ${JSON.stringify(reachableThrough)}`)
     }
 
     // We only suspend if we will have at least 1 path of connection for this peer after suspensions
     if (reachableThrough.length > 1 || (reachableThrough.length === 1 && reachableThrough[0].id !== connectedPeerId)) {
-      if (this.config.verbose) {
+      if (this.logConfig.verbose) {
         this.logger.log(`Will add suspension for ${packet.src} -> ${connectedPeerId}`)
       }
       relayData.pendingSuspensionRequests.push(packet.src)
@@ -571,54 +579,6 @@ export class P2PTransport {
     if (expired || alreadyReceived) {
       receivedRelayData.discarded += 1
     }
-  }
-
-  private processPong(peerId: string, pingId: number) {
-    const now = performance.now()
-    const activePing = this.activePings[pingId]
-    if (activePing && activePing.startTime) {
-      const elapsed = now - activePing.startTime
-
-      const knownPeer = this.addKnownPeerIfNotExists({ id: peerId })
-      knownPeer.latency = elapsed
-
-      activePing.results.push({ peerId, latency: elapsed })
-    }
-  }
-
-  private respondPing(pingId: number) {
-    const pongData = { pingId }
-
-    // TODO: Maybe we should add a destination and handle this message as unicast
-    const packet = this.buildPacketWithData(PongMessageType, { pongData })
-    packet.expireTime = DEFAULT_PING_TIMEOUT
-    this.sendPacket(packet)
-  }
-
-  private checkExpired(packet: Packet) {
-    const discardedByOlderThan: boolean = this.isDiscardedByOlderThanReceivedPackages(packet)
-
-    let discardedByExpireTime: boolean = false
-    const expireTime = this.getExpireTime(packet)
-
-    if (this.knownPeers[packet.src].timestamp) {
-      discardedByExpireTime = this.knownPeers[packet.src].timestamp! - this.getTimestamp(packet) > expireTime
-    }
-
-    return discardedByOlderThan || discardedByExpireTime
-  }
-
-  private isDiscardedByOlderThanReceivedPackages(packet: Packet) {
-    if (packet.discardOlderThan >= 0 && packet.subtype) {
-      const subtypeData = this.knownPeers[packet.src]?.subtypeData[packet.subtype]
-      return (
-        subtypeData &&
-        subtypeData.lastTimestamp - this.getTimestamp(packet) > packet.discardOlderThan &&
-        subtypeData.lastSequenceId >= packet.sequenceId
-      )
-    }
-
-    return false
   }
 
   private buildPacketWithData(type: PeerMessageType, data: PacketData): Packet {
@@ -773,7 +733,7 @@ export class P2PTransport {
     try {
       this.updatingNetwork = true
 
-      if (this.config.verbose) {
+      if (this.logConfig.debugUpdateNetwork) {
         this.logger.log(`Updating network because of event "${event}"...`)
       }
 
@@ -788,17 +748,40 @@ export class P2PTransport {
         return typeof distance !== 'undefined' && distance <= MAX_CONNECTION_DISTANCE
       })
 
+      // NOTE(hugo): this operation used to be part of calculateNextNetworkOperation
+      // but that was wrong, since no new connected peers will be added after a given iteration
+      const neededConnections = DEFAULT_TARGET_CONNECTIONS - this.mesh.connectedCount()
+      // If we need to establish new connections because we are below the target, we do that
+      if (
+        neededConnections > 0 &&
+        connectionCandidates.length > 0 &&
+        this.mesh.connectionsCount() < DEFAULT_MAX_CONNECTIONS
+      ) {
+        if (this.logConfig.debugUpdateNetwork) {
+          this.logger.log(`Establishing connections to reach target. I need ${neededConnections} more connections`)
+        }
+        const [candidates, remaining] = pickBy(connectionCandidates, neededConnections, this.peerSortCriteria())
+
+        if (this.logConfig.verbose) {
+          this.logger.log(`Picked connection candidates ${JSON.stringify(candidates)} `)
+        }
+
+        const reason = 'I need more connections.'
+        await Promise.all(candidates.map((candidate) => this.connectTo(candidate, reason)))
+        connectionCandidates = remaining
+      }
+
       let operation: NetworkOperation | undefined
       while ((operation = this.calculateNextNetworkOperation(connectionCandidates))) {
         try {
           connectionCandidates = await operation()
         } catch (e) {
           // We may want to invalidate the operation or something to avoid repeating the same mistake
-          this.logger.log(`Error performing operation ${operation} ${e} `)
+          this.logger.log(`Error performing operation ${operation} ${e}`)
         }
       }
     } finally {
-      if (this.config.verbose) {
+      if (this.logConfig.debugUpdateNetwork) {
         this.logger.log('Network update finished')
       }
 
@@ -807,6 +790,8 @@ export class P2PTransport {
   }
 
   private peerSortCriteria() {
+    // We are going to be calculating the distance to each of the candidates. This could be costly, but since the state could have changed after every operation,
+    // we need to ensure that the value is updated. If known peers is kept under maybe 2k elements, it should be no problem.
     return (peer1: KnownPeerData, peer2: KnownPeerData) => {
       // We prefer those peers that have position over those that don't
       if (peer1.position && !peer2.position) return -1
@@ -824,40 +809,11 @@ export class P2PTransport {
   }
 
   private calculateNextNetworkOperation(connectionCandidates: KnownPeerData[]): NetworkOperation | undefined {
-    if (this.config.verbose) {
+    if (this.logConfig.verbose) {
       this.logger.log(`Calculating network operation with candidates ${JSON.stringify(connectionCandidates)}`)
     }
 
     const peerSortCriteria = this.peerSortCriteria()
-
-    const pickCandidates = (count: number) => {
-      // We are going to be calculating the distance to each of the candidates. This could be costly, but since the state could have changed after every operation,
-      // we need to ensure that the value is updated. If known peers is kept under maybe 2k elements, it should be no problem.
-      return pickBy(connectionCandidates, count, peerSortCriteria)
-    }
-
-    const neededConnections = DEFAULT_TARGET_CONNECTIONS - this.mesh.connectedCount()
-    // If we need to establish new connections because we are below the target, we do that
-    if (
-      neededConnections > 0 &&
-      connectionCandidates.length > 0 &&
-      this.mesh.connectionsCount() < DEFAULT_MAX_CONNECTIONS
-    ) {
-      if (this.config.verbose) {
-        this.logger.log('Establishing connections to reach target')
-      }
-      return async () => {
-        const [candidates, remaining] = pickCandidates(neededConnections)
-
-        if (this.config.verbose) {
-          this.logger.log(`Picked connection candidates ${JSON.stringify(candidates)} `)
-        }
-
-        const reason = `I need ${neededConnections} more connetions.`
-        await Promise.all(candidates.map((candidate) => this.connectTo(candidate, reason)))
-        return remaining
-      }
-    }
 
     // If we are over the max amount of connections, we discard the "worst"
     const toDisconnect = this.mesh.connectedCount() - DEFAULT_MAX_CONNECTIONS
@@ -915,7 +871,7 @@ export class P2PTransport {
   }
 
   private distanceTo(peerId: string) {
-    const position = this.config.selfPosition()
+    const position = this.selfPosition()
     if (this.knownPeers[peerId]?.position && position) {
       return this.distance(position, this.knownPeers[peerId].position!)
     }
@@ -934,17 +890,6 @@ export class P2PTransport {
     delete this.peerRelayData[peerId]
   }
 
-  private ensureAndUpdateKnownPeer(packet: Packet, connectedPeerId: string) {
-    const minPeerData = { id: packet.src }
-    this.addKnownPeerIfNotExists(minPeerData)
-
-    this.knownPeers[packet.src].reachableThrough[connectedPeerId] = {
-      id: connectedPeerId,
-      hops: packet.hops + 1,
-      timestamp: Date.now()
-    }
-  }
-
   private addKnownPeerIfNotExists(peer: MinPeerData) {
     if (!this.knownPeers[peer.id]) {
       this.knownPeers[peer.id] = {
@@ -959,9 +904,5 @@ export class P2PTransport {
 
   private removeKnownPeer(peerId: string) {
     delete this.knownPeers[peerId]
-  }
-
-  private getTimestamp(packet: Packet) {
-    return packet.timestamp
   }
 }
