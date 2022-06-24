@@ -297,16 +297,26 @@ export class P2PTransport {
 
       this.ensureAndUpdateKnownPeer(packet, peerId)
 
-      if (packet.discardOlderThan !== 0) {
+      const now = Date.now()
+      const expirationTime = this.getExpireTime(packet)
+      let expired = now - packet.timestamp > expirationTime
+
+      if (!expired && packet.discardOlderThan >= 0 && packet.subtype) {
+        const subtypeData = this.knownPeers[packet.src]?.subtypeData[packet.subtype]
+        expired =
+          subtypeData &&
+          subtypeData.lastTimestamp - packet.timestamp > packet.discardOlderThan &&
+          subtypeData.lastSequenceId >= packet.sequenceId
+      }
+
+      if (!expired && packet.discardOlderThan !== 0) {
         // If discardOlderThan is zero, then we don't need to store the package.
         // Same or older packages will be instantly discarded
         this.receivedPackets[packetKey] = {
-          timestamp: Date.now(),
-          expirationTime: this.getExpireTime(packet)
+          timestamp: now,
+          expirationTime
         }
       }
-
-      const expired = this.checkExpired(packet)
 
       if (packet.hops >= 1) {
         this.countRelay(peerId, packet, expired, alreadyReceived)
@@ -566,32 +576,6 @@ export class P2PTransport {
     if (expired || alreadyReceived) {
       receivedRelayData.discarded += 1
     }
-  }
-
-  private checkExpired(packet: Packet) {
-    const discardedByOlderThan: boolean = this.isDiscardedByOlderThanReceivedPackages(packet)
-
-    let discardedByExpireTime: boolean = false
-    const expireTime = this.getExpireTime(packet)
-
-    if (this.knownPeers[packet.src].timestamp) {
-      discardedByExpireTime = this.knownPeers[packet.src].timestamp! - packet.timestamp > expireTime
-    }
-
-    return discardedByOlderThan || discardedByExpireTime
-  }
-
-  private isDiscardedByOlderThanReceivedPackages(packet: Packet) {
-    if (packet.discardOlderThan >= 0 && packet.subtype) {
-      const subtypeData = this.knownPeers[packet.src]?.subtypeData[packet.subtype]
-      return (
-        subtypeData &&
-        subtypeData.lastTimestamp - packet.timestamp > packet.discardOlderThan &&
-        subtypeData.lastSequenceId >= packet.sequenceId
-      )
-    }
-
-    return false
   }
 
   private buildPacketWithData(type: PeerMessageType, data: PacketData): Packet {
