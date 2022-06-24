@@ -76,11 +76,9 @@ export type TransportsConfig = {
         verbose: boolean;
     };
     p2p: {
-        logConfig: {
-            verbose: boolean;
-            debugWebRtcEnabled: boolean;
-            debugUpdateNetwork: boolean;
-        };
+        verbose?: boolean;
+        debugWebRtcEnabled?: boolean;
+        debugUpdateNetwork?: boolean;
         relaySuspensionConfig?: RelaySuspensionConfig;
     };
 };
@@ -89,7 +87,7 @@ export type TransportsConfig = {
 //
 // src/index.ts:15:3 - (ae-forgotten-export) The symbol "ILogger" needs to be exported by the entry point index.d.ts
 // src/index.ts:16:3 - (ae-forgotten-export) The symbol "BFFConnection" needs to be exported by the entry point index.d.ts
-// src/index.ts:28:5 - (ae-forgotten-export) The symbol "RelaySuspensionConfig" needs to be exported by the entry point index.d.ts
+// src/index.ts:26:5 - (ae-forgotten-export) The symbol "RelaySuspensionConfig" needs to be exported by the entry point index.d.ts
 // src/types.ts:20:3 - (ae-forgotten-export) The symbol "TransportStatistics" needs to be exported by the entry point index.d.ts
 // src/types.ts:23:3 - (ae-forgotten-export) The symbol "SendOpts" needs to be exported by the entry point index.d.ts
 
