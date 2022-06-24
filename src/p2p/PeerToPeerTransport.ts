@@ -227,7 +227,7 @@ export class P2PTransport {
     if (peerLeftMessage.islandId === this.islandId) {
       this.logger.log(`peer ${peerId} left ${this.islandId}`)
       this.disconnectFrom(peerId)
-      this.removeKnownPeer(peerId)
+      delete this.knownPeers[peerId]
       this.triggerUpdateNetwork(`peer ${peerId} left island`)
     } else {
       this.logger.warn(`peer ${peerId} left ${peerLeftMessage.islandId}, but our current island is ${this.islandId}`)
@@ -767,7 +767,7 @@ export class P2PTransport {
         }
 
         const reason = 'I need more connections.'
-        await Promise.all(candidates.map((candidate) => this.connectTo(candidate, reason)))
+        await Promise.all(candidates.map((candidate) => this.mesh.connectTo(candidate.id, reason)))
         connectionCandidates = remaining
       }
 
@@ -847,7 +847,7 @@ export class P2PTransport {
             `Found a better candidate for connection, replacing ${worstPeer[1]} (${worstPeer[0]}) with ${bestCandidate} (${bestCandidateDistance})`
           )
           return async () => {
-            await this.connectTo(bestCandidate, 'There is a better candidate')
+            await this.mesh.connectTo(bestCandidate.id, 'There is a better candidate')
             return sortedCandidates
           }
         }
@@ -881,10 +881,6 @@ export class P2PTransport {
     return packet.expireTime > 0 ? packet.expireTime : DEFAULT_MESSAGE_EXPIRATION_TIME
   }
 
-  async connectTo(known: KnownPeerData, reason: string) {
-    return this.mesh.connectTo(known.id, reason)
-  }
-
   private disconnectFrom(peerId: string) {
     this.mesh.disconnectFrom(peerId)
     delete this.peerRelayData[peerId]
@@ -900,9 +896,5 @@ export class P2PTransport {
     }
 
     return this.knownPeers[peer.id]
-  }
-
-  private removeKnownPeer(peerId: string) {
-    delete this.knownPeers[peerId]
   }
 }
