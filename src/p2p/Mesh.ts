@@ -184,7 +184,7 @@ export class Mesh {
     this.initiatedConnections.forEach((conn: Connection, peerId: string) => {
       const state = conn.instance.connectionState
       if (state !== 'connected' && Date.now() - conn.createTimestamp > PEER_CONNECT_TIMEOUT) {
-        this.logger.warn(`The connection ->${peerId} is not in a sane state ${state}. Discarding it.`)
+        this.debugWebRtc(`The connection ->${peerId} is not in a sane state ${state}. Discarding it.`)
         conn.instance.close()
         this.initiatedConnections.delete(peerId)
       }
@@ -192,7 +192,7 @@ export class Mesh {
     this.receivedConnections.forEach((conn: Connection, peerId: string) => {
       const state = conn.instance.connectionState
       if (state !== 'connected' && Date.now() - conn.createTimestamp > PEER_CONNECT_TIMEOUT) {
-        this.logger.warn(`The connection <-${peerId} is not in a sane state ${state}. Discarding it.`)
+        this.debugWebRtc(`The connection <-${peerId} is not in a sane state ${state}. Discarding it.`)
         conn.instance.close()
         this.receivedConnections.delete(peerId)
       }
