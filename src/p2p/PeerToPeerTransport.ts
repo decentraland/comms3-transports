@@ -291,13 +291,18 @@ export class P2PTransport {
     this.statisticsCollector.onBytesRecv(data.length)
     try {
       const packet = Packet.decode(Reader.create(data))
-
+      const now = Date.now()
       const packetKey = `${packet.src}_${packet.instanceId}_${packet.sequenceId}`
       const alreadyReceived = !!this.receivedPackets[packetKey]
 
-      this.ensureAndUpdateKnownPeer(packet, peerId)
+      this.addKnownPeerIfNotExists({ id: packet.src })
 
-      const now = Date.now()
+      this.knownPeers[packet.src].reachableThrough[peerId] = {
+        id: peerId,
+        hops: packet.hops + 1,
+        timestamp: now
+      }
+
       const expirationTime = this.getExpireTime(packet)
       let expired = now - packet.timestamp > expirationTime
 
@@ -343,7 +348,16 @@ export class P2PTransport {
   }
 
   private processPacket(packet: Packet) {
-    this.updateTimeStamp(packet.src, packet.subtype, packet.timestamp, packet.sequenceId)
+    const knownPeer = this.knownPeers[packet.src]
+    knownPeer.lastUpdated = Date.now()
+    knownPeer.timestamp = Math.max(knownPeer.timestamp ?? Number.MIN_SAFE_INTEGER, packet.timestamp)
+    if (packet.subtype) {
+      const lastData = knownPeer.subtypeData[packet.subtype]
+      knownPeer.subtypeData[packet.subtype] = {
+        lastTimestamp: Math.max(lastData?.lastTimestamp ?? Number.MIN_SAFE_INTEGER, packet.timestamp),
+        lastSequenceId: Math.max(lastData?.lastSequenceId ?? Number.MIN_SAFE_INTEGER, packet.sequenceId)
+      }
+    }
 
     packet.hops += 1
 
@@ -437,19 +451,6 @@ export class P2PTransport {
         })
       }
     })
-  }
-
-  private updateTimeStamp(peerId: string, subtype: string | undefined, timestamp: number, sequenceId: number) {
-    const knownPeer = this.knownPeers[peerId]
-    knownPeer.lastUpdated = Date.now()
-    knownPeer.timestamp = Math.max(knownPeer.timestamp ?? Number.MIN_SAFE_INTEGER, timestamp)
-    if (subtype) {
-      const lastData = knownPeer.subtypeData[subtype]
-      knownPeer.subtypeData[subtype] = {
-        lastTimestamp: Math.max(lastData?.lastTimestamp ?? Number.MIN_SAFE_INTEGER, timestamp),
-        lastSequenceId: Math.max(lastData?.lastSequenceId ?? Number.MIN_SAFE_INTEGER, sequenceId)
-      }
-    }
   }
 
   private getPeerRelayData(peerId: string) {
@@ -885,17 +886,6 @@ export class P2PTransport {
   private disconnectFrom(peerId: string) {
     this.mesh.disconnectFrom(peerId)
     delete this.peerRelayData[peerId]
-  }
-
-  private ensureAndUpdateKnownPeer(packet: Packet, connectedPeerId: string) {
-    const minPeerData = { id: packet.src }
-    this.addKnownPeerIfNotExists(minPeerData)
-
-    this.knownPeers[packet.src].reachableThrough[connectedPeerId] = {
-      id: connectedPeerId,
-      hops: packet.hops + 1,
-      timestamp: Date.now()
-    }
   }
 
   private addKnownPeerIfNotExists(peer: MinPeerData) {
