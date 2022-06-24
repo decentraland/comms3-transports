@@ -53,8 +53,6 @@ const DEFAULT_TARGET_CONNECTIONS = 4
 const DEFAULT_MAX_CONNECTIONS = 6
 const DEFAULT_MESSAGE_EXPIRATION_TIME = 10000
 
-let debugPacketExpiration = true
-
 export class P2PTransport {
   public readonly name = 'p2p'
   public readonly peerId: string
@@ -272,12 +270,12 @@ export class P2PTransport {
     this.onDisconnectObservable.notifyObservers()
   }
 
-  async send(payload: Uint8Array, { reliable, debugName }: SendOpts): Promise<void> {
+  async send(payload: Uint8Array, { reliable }: SendOpts): Promise<void> {
     if (this.disposed) {
       return
     }
 
-    const subtype = debugName || 'data'
+    const subtype = 'data'
     const t = reliable ? PeerMessageTypes.reliable(subtype) : PeerMessageTypes.unreliable(subtype)
 
     const messageData = { room: this.islandId, payload, dst: [] }
@@ -309,9 +307,6 @@ export class P2PTransport {
 
       const expirationTime = this.getExpireTime(packet)
       let expired = now - packet.timestamp > expirationTime
-      if (expired && packet.subtype) {
-        this.logger.log('expired', packet.subtype, packetKey)
-      }
 
       if (!expired && packet.discardOlderThan >= 0 && packet.subtype) {
         const subtypeData = this.knownPeers[packet.src]?.subtypeData[packet.subtype]
@@ -319,10 +314,6 @@ export class P2PTransport {
           subtypeData &&
           subtypeData.lastTimestamp - packet.timestamp > packet.discardOlderThan &&
           subtypeData.lastSequenceId >= packet.sequenceId
-
-        if (expired && debugPacketExpiration) {
-          this.logger.log('expired due to discardOlderThan', packet.subtype, packetKey)
-        }
       }
 
       if (!expired && packet.discardOlderThan !== 0) {

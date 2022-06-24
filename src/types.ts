@@ -45,7 +45,6 @@ export type TransportMessage = {
 export type SendOpts = {
   reliable: boolean
   identity?: boolean
-  debugName?: string
 }
 
 /**
