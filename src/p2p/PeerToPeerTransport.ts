@@ -437,7 +437,7 @@ export class P2PTransport {
     Object.keys(this.knownPeers).forEach((id) => {
       const lastUpdate = this.knownPeers[id].lastUpdated
       if (lastUpdate && currentTimestamp - lastUpdate > KNOWN_PEERS_EXPIRE_TIME) {
-        if (this.isConnectedTo(id)) {
+        if (this.mesh.isConnectedTo(id)) {
           this.disconnectFrom(id)
         }
         delete this.knownPeers[id]
@@ -529,7 +529,7 @@ export class P2PTransport {
     // We get a list of through which connected peers is this src reachable and are not suspended
     const reachableThrough = Object.values(this.knownPeers[packet.src].reachableThrough).filter(
       (it) =>
-        this.isConnectedTo(it.id) &&
+        this.mesh.isConnectedTo(it.id) &&
         now - it.timestamp < KNOWN_PEER_RELAY_EXPIRE_TIME &&
         !this.isRelayFromConnectionSuspended(it.id, packet.src, now)
     )
@@ -680,14 +680,12 @@ export class P2PTransport {
   }
 
   private sendPacketToPeer(peer: string, payload: Uint8Array) {
-    if (this.isConnectedTo(peer)) {
-      try {
-        if (this.mesh.sendPacketToPeer(peer, payload)) {
-          this.statisticsCollector.onBytesSent(payload.length)
-        }
-      } catch (e: any) {
-        this.logger.warn(`Error sending data to peer ${peer} ${e.toString()}`)
+    try {
+      if (this.mesh.sendPacketToPeer(peer, payload)) {
+        this.statisticsCollector.onBytesSent(payload.length)
       }
+    } catch (e: any) {
+      this.logger.warn(`Error sending data to peer ${peer} ${e.toString()}`)
     }
   }
 
@@ -708,10 +706,6 @@ export class P2PTransport {
       this.logger.warn(`Error updating network after ${event}, ${e} `)
     })
     this.scheduleUpdateNetwork()
-  }
-
-  private isConnectedTo(peerId: string): boolean {
-    return this.mesh.isConnectedTo(peerId)
   }
 
   private getWorstConnectedPeerByDistance(): [number, string] | undefined {
@@ -739,28 +733,27 @@ export class P2PTransport {
 
       this.mesh.checkConnectionsSanity()
 
-      let connectionCandidates = Object.values(this.knownPeers).filter((it) => {
-        if (this.isConnectedTo(it.id)) {
-          return false
-        }
-
-        const distance = this.distanceTo(it.id)
-        return typeof distance !== 'undefined' && distance <= MAX_CONNECTION_DISTANCE
-      })
-
       // NOTE(hugo): this operation used to be part of calculateNextNetworkOperation
       // but that was wrong, since no new connected peers will be added after a given iteration
       const neededConnections = DEFAULT_TARGET_CONNECTIONS - this.mesh.connectedCount()
       // If we need to establish new connections because we are below the target, we do that
-      if (
-        neededConnections > 0 &&
-        connectionCandidates.length > 0 &&
-        this.mesh.connectionsCount() < DEFAULT_MAX_CONNECTIONS
-      ) {
+      if (neededConnections > 0 && this.mesh.connectionsCount() < DEFAULT_MAX_CONNECTIONS) {
         if (this.logConfig.debugUpdateNetwork) {
           this.logger.log(`Establishing connections to reach target. I need ${neededConnections} more connections`)
         }
-        const [candidates, remaining] = pickBy(connectionCandidates, neededConnections, this.peerSortCriteria())
+
+        const candidates = pickBy(
+          Object.values(this.knownPeers).filter((peer) => {
+            if (this.mesh.hasConnectionsFor(peer.id)) {
+              return false
+            }
+
+            const distance = this.distanceTo(peer.id)
+            return typeof distance !== 'undefined' && distance <= MAX_CONNECTION_DISTANCE
+          }),
+          neededConnections,
+          this.peerSortCriteria()
+        )
 
         if (this.logConfig.verbose) {
           this.logger.log(`Picked connection candidates ${JSON.stringify(candidates)} `)
@@ -768,8 +761,16 @@ export class P2PTransport {
 
         const reason = 'I need more connections.'
         await Promise.all(candidates.map((candidate) => this.mesh.connectTo(candidate.id, reason)))
-        connectionCandidates = remaining
       }
+
+      let connectionCandidates = Object.values(this.knownPeers).filter((it) => {
+        if (this.mesh.isConnectedTo(it.id)) {
+          return false
+        }
+
+        const distance = this.distanceTo(it.id)
+        return typeof distance !== 'undefined' && distance <= MAX_CONNECTION_DISTANCE
+      })
 
       let operation: NetworkOperation | undefined
       while ((operation = this.calculateNextNetworkOperation(connectionCandidates))) {
@@ -821,7 +822,7 @@ export class P2PTransport {
       this.logger.log(`Too many connections. Need to disconnect from: ${toDisconnect}`)
       return async () => {
         Object.values(this.knownPeers)
-          .filter((peer) => this.isConnectedTo(peer.id))
+          .filter((peer) => this.mesh.isConnectedTo(peer.id))
           // We sort the connected peer by the opposite criteria
           .sort((peer1, peer2) => -peerSortCriteria(peer1, peer2))
           .slice(0, toDisconnect)

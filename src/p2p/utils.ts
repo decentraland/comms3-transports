@@ -41,10 +41,10 @@ export function randomUint32() {
  * Picks the top `count` elements according to `criteria` from the array and returns them and the remaining elements. If the array
  * has less or equal elements than the amount required, then it returns a copy of the array sorted by `criteria`.
  */
-export function pickBy<T>(array: T[], count: number, criteria: (t1: T, t2: T) => number): [T[], T[]] {
+export function pickBy<T>(array: T[], count: number, criteria: (t1: T, t2: T) => number): T[] {
   const sorted = array.sort(criteria)
 
   const selected = sorted.splice(0, count)
 
-  return [selected, sorted]
+  return selected
 }
