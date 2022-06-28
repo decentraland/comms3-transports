@@ -15,11 +15,7 @@ export function createTransport(config: TransportsConfig, islandChangedMessage: 
 // @public
 export class DummyTransport {
     // (undocumented)
-    collectStatistics(): {
-        time: number;
-        bytesSent: number;
-        bytesRecv: number;
-    };
+    collectStatistics(): undefined;
     // (undocumented)
     connect(): Promise<void>;
     // (undocumented)
@@ -38,6 +34,10 @@ export class DummyTransport {
     readonly peerId = "none";
     // (undocumented)
     send(): Promise<void>;
+    // (undocumented)
+    startStatistics(): void;
+    // (undocumented)
+    stopStatistics(): void;
 }
 
 // @public

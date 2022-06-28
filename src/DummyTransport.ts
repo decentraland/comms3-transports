@@ -17,11 +17,10 @@ export class DummyTransport {
   async disconnect(): Promise<void> {}
   onPeerPositionChange(_: string, __: Position3D) {}
 
+  startStatistics() {}
+  stopStatistics() {}
+
   collectStatistics() {
-    return {
-      time: Date.now(),
-      bytesSent: 0,
-      bytesRecv: 0
-    }
+    return undefined
   }
 }
