@@ -34,6 +34,14 @@ export class WsTransport {
 
   onPeerPositionChange(_: string, __: Position3D) {}
 
+  startStatistics() {
+    this.statisticsCollector.start()
+  }
+
+  stopStatistics() {
+    this.statisticsCollector.stop()
+  }
+
   collectStatistics() {
     return this.statisticsCollector.collectStatistics()
   }

@@ -2,7 +2,15 @@ import { Reader } from 'protobufjs/minimal'
 import { Observable } from 'mz-observable'
 import { future } from 'fp-future'
 
-import { TransportMessage, BFFConnection, TopicListener, Position3D, ILogger, SendOpts } from '../types'
+import {
+  TransportStatistics,
+  TransportMessage,
+  BFFConnection,
+  TopicListener,
+  Position3D,
+  ILogger,
+  SendOpts
+} from '../types'
 import { StatisticsCollector } from '../statistics'
 import { JoinIslandMessage, LeftIslandMessage } from '../proto/archipelago'
 import { SuspendRelayData, PingData, PongData, Packet, MessageData } from '../proto/p2p'
@@ -168,17 +176,27 @@ export class P2PTransport {
     })
   }
 
-  collectStatistics() {
+  startStatistics() {
+    this.statisticsCollector.start()
+  }
+
+  stopStatistics() {
+    this.statisticsCollector.stop()
+  }
+
+  collectStatistics(): TransportStatistics | undefined {
     const s = this.statisticsCollector.collectStatistics()
+    if (s) {
+      let knownPeers = 0
+      Object.keys(this.knownPeers).forEach((_) => {
+        knownPeers++
+      })
 
-    let knownPeers = 0
-    Object.keys(this.knownPeers).forEach((_) => {
-      knownPeers++
-    })
-
-    s.custom = {
-      knownPeers
+      s.custom = {
+        knownPeers
+      }
     }
+
     return s
   }
 

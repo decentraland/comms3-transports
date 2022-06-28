@@ -50,7 +50,9 @@ export type Transport = {
     name: TransportName;
     peerId: string;
     islandId: string;
-    collectStatistics(): TransportStatistics;
+    startStatistics(): void;
+    collectStatistics(): TransportStatistics | undefined;
+    stopStatistics(): void;
     connect(): Promise<void>;
     send(msg: Uint8Array, opts: SendOpts): Promise<void>;
     disconnect(): Promise<void>;
@@ -88,8 +90,8 @@ export type TransportsConfig = {
 // src/index.ts:15:3 - (ae-forgotten-export) The symbol "ILogger" needs to be exported by the entry point index.d.ts
 // src/index.ts:16:3 - (ae-forgotten-export) The symbol "BFFConnection" needs to be exported by the entry point index.d.ts
 // src/index.ts:26:5 - (ae-forgotten-export) The symbol "RelaySuspensionConfig" needs to be exported by the entry point index.d.ts
-// src/types.ts:20:3 - (ae-forgotten-export) The symbol "TransportStatistics" needs to be exported by the entry point index.d.ts
-// src/types.ts:23:3 - (ae-forgotten-export) The symbol "SendOpts" needs to be exported by the entry point index.d.ts
+// src/types.ts:21:3 - (ae-forgotten-export) The symbol "TransportStatistics" needs to be exported by the entry point index.d.ts
+// src/types.ts:25:3 - (ae-forgotten-export) The symbol "SendOpts" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

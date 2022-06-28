@@ -69,6 +69,14 @@ export class LivekitTransport {
       })
   }
 
+  startStatistics() {
+    this.statisticsCollector.start()
+  }
+
+  stopStatistics() {
+    this.statisticsCollector.stop()
+  }
+
   collectStatistics() {
     return this.statisticsCollector.collectStatistics()
   }

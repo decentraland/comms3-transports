@@ -17,7 +17,9 @@ export type Transport = {
   peerId: string
   islandId: string
 
-  collectStatistics(): TransportStatistics
+  startStatistics(): void
+  collectStatistics(): TransportStatistics | undefined
+  stopStatistics(): void
 
   connect(): Promise<void>
   send(msg: Uint8Array, opts: SendOpts): Promise<void>
@@ -52,10 +54,13 @@ export type SendOpts = {
  * @public
  */
 export type TransportStatistics = {
-  time: number
+  beginTime: number
+  endTime: number
 
   bytesSent: number
   bytesRecv: number
+  messagesSent: number
+  messagesRecv: number
 
   custom?: Record<string, any>
 }
