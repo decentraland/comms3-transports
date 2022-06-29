@@ -207,7 +207,7 @@ export class P2PTransport {
     }
   }
 
-  private onPeerJoined(data: Uint8Array) {
+  private async onPeerJoined(data: Uint8Array) {
     let peerJoinMessage: JoinIslandMessage
     try {
       peerJoinMessage = JoinIslandMessage.decode(Reader.create(data))
@@ -231,7 +231,7 @@ export class P2PTransport {
     }
   }
 
-  private onPeerLeft(data: Uint8Array) {
+  private async onPeerLeft(data: Uint8Array) {
     let peerLeftMessage: LeftIslandMessage
     try {
       peerLeftMessage = LeftIslandMessage.decode(Reader.create(data))

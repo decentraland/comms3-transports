@@ -87,9 +87,12 @@ export type TopicListener = any
 
 export type BFFConnection = {
   publishToTopic(topic: string, payload: Uint8Array): Promise<void>
-  addPeerTopicListener(topic: string, handler: (data: Uint8Array, peerId: string) => void): Promise<TopicListener>
+  addPeerTopicListener(
+    topic: string,
+    handler: (data: Uint8Array, peerId: string) => Promise<void>
+  ): Promise<TopicListener>
 
-  addSystemTopicListener(topic: string, handler: (data: Uint8Array) => void): Promise<TopicListener>
+  addSystemTopicListener(topic: string, handler: (data: Uint8Array) => Promise<void>): Promise<TopicListener>
 
   removePeerTopicListener(l: TopicListener): Promise<void>
   removeSystemTopicListener(l: TopicListener): Promise<void>

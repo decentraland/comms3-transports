@@ -47,8 +47,40 @@ export class WsTransport {
   }
 
   async connect(): Promise<void> {
-    await this.connectWS()
-    this.logger.log('Connected')
+    if (this.ws && this.ws.readyState === this.ws.OPEN) return Promise.resolve()
+
+    if (this.ws) {
+      this.ws.close()
+      this.ws = null
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      try {
+        this.ws = new WebSocket(this.url, 'comms')
+        this.ws.binaryType = 'arraybuffer'
+      } catch (err) {
+        return reject(err)
+      }
+
+      this.ws.onerror = (event) => {
+        this.logger.error('socket error', event)
+        this.disconnect().catch(this.logger.error)
+        reject(event)
+      }
+
+      this.ws.onclose = () => {
+        this.disconnect().catch(this.logger.error)
+      }
+
+      this.ws.onmessage = (event) => {
+        this.onWsMessage(event).catch(this.logger.error)
+      }
+
+      this.ws.onopen = () => {
+        this.logger.log('Connected')
+        resolve()
+      }
+    })
   }
 
   async send(body: Uint8Array, { identity }: SendOpts): Promise<void> {
@@ -69,11 +101,12 @@ export class WsTransport {
 
   async disconnect() {
     if (this.ws) {
-      this.ws.onmessage = null
-      this.ws.onerror = null
-      this.ws.onclose = null
-      this.ws.close()
+      const ws = this.ws
       this.ws = null
+      ws.onmessage = null
+      ws.onerror = null
+      ws.onclose = null
+      ws.close()
       this.onDisconnectObservable.notifyObservers()
     }
   }
@@ -124,37 +157,5 @@ export class WsTransport {
         break
       }
     }
-  }
-
-  private connectWS(): Promise<void> {
-    if (this.ws && this.ws.readyState === this.ws.OPEN) return Promise.resolve()
-
-    if (this.ws) {
-      this.ws.close()
-      this.ws = null
-    }
-
-    return new Promise<void>((resolve, reject) => {
-      this.ws = new WebSocket(this.url, 'comms')
-      this.ws.binaryType = 'arraybuffer'
-
-      this.ws.onerror = (event) => {
-        this.logger.error('socket error', event)
-        this.disconnect().catch(this.logger.error)
-        reject(event)
-      }
-
-      this.ws.onclose = () => {
-        this.disconnect().catch(this.logger.error)
-      }
-
-      this.ws.onmessage = (event) => {
-        this.onWsMessage(event).catch(this.logger.error)
-      }
-
-      this.ws.onopen = () => {
-        resolve()
-      }
-    })
   }
 }
