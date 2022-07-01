@@ -75,13 +75,16 @@ export type TransportsConfig = {
     selfPosition: () => Position3D | undefined;
     peerId: string;
     livekit: {
-        verbose: boolean;
+        verbose?: boolean;
     };
     p2p: {
         verbose?: boolean;
         debugWebRtcEnabled?: boolean;
         debugUpdateNetwork?: boolean;
         relaySuspensionConfig?: RelaySuspensionConfig;
+    };
+    ws: {
+        verbose?: boolean;
     };
 };
 

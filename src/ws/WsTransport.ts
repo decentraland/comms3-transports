@@ -5,11 +5,16 @@ import { ILogger, SendOpts, TransportMessage, Position3D } from '../types'
 import { StatisticsCollector } from '../statistics'
 import { WsMessage } from '../proto/ws'
 
+export type LogConfig = {
+  verbose: boolean
+}
+
 export type WsConfig = {
   logger: ILogger
   url: string
   peerId: string
   islandId: string
+  logConfig: LogConfig
 }
 
 export class WsTransport {
@@ -23,12 +28,14 @@ export class WsTransport {
   private logger: ILogger
   private url: string
   private statisticsCollector: StatisticsCollector
+  public logConfig: LogConfig
 
-  constructor({ logger, url, peerId, islandId }: WsConfig) {
+  constructor({ logger, url, peerId, islandId, logConfig }: WsConfig) {
     this.peerId = peerId
     this.islandId = islandId
     this.logger = logger
     this.url = url
+    this.logConfig = logConfig
     this.statisticsCollector = new StatisticsCollector()
   }
 
@@ -47,11 +54,8 @@ export class WsTransport {
   }
 
   async connect(): Promise<void> {
-    if (this.ws && this.ws.readyState === this.ws.OPEN) return Promise.resolve()
-
     if (this.ws) {
-      this.ws.close()
-      this.ws = null
+      return Promise.resolve()
     }
 
     return new Promise<void>((resolve, reject) => {
@@ -69,6 +73,7 @@ export class WsTransport {
       }
 
       this.ws.onclose = () => {
+        this.logger.log('socket close')
         this.disconnect().catch(this.logger.error)
       }
 
@@ -77,7 +82,9 @@ export class WsTransport {
       }
 
       this.ws.onopen = () => {
-        this.logger.log('Connected')
+        if (this.logConfig.verbose) {
+          this.logger.log('Connected')
+        }
         resolve()
       }
     })
@@ -131,7 +138,9 @@ export class WsTransport {
         const { systemMessage } = message.data
         const userId = this.aliases[systemMessage.fromAlias]
         if (!userId) {
-          this.logger.log('Ignoring system message from unkown peer')
+          if (this.logConfig.verbose) {
+            this.logger.log('Ignoring system message from unkown peer')
+          }
           return
         }
 
