@@ -60,4 +60,7 @@ lint:
 lint-fix: ## Fix bad formatting on all .ts and .tsx files
 	@node_modules/.bin/eslint . --ext .ts --fix
 
-.PHONY: build test build-proto lint lint-fix
+install:
+	nmp ci
+
+.PHONY: build test build-proto lint lint-fix install
