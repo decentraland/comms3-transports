@@ -66,7 +66,7 @@ export class Mesh {
 
     this.logger.log(`Connecting to ${peerId}. ${reason}`)
 
-    const instance = this.createConnection(peerId)
+    const instance = this.createConnection(peerId, this.peerId)
     const conn: Connection = { instance, createTimestamp: Date.now() }
     instance.addEventListener('connectionstatechange', (_) => {
       switch (instance.connectionState) {
@@ -239,7 +239,7 @@ export class Mesh {
     this.receivedConnections.clear()
   }
 
-  private createConnection(peerId: string) {
+  private createConnection(peerId: string, initiator: string) {
     const instance = new RTCPeerConnection({
       iceServers: defaultIceServers
     })
@@ -247,7 +247,7 @@ export class Mesh {
     instance.addEventListener('icecandidate', async (event) => {
       if (event.candidate) {
         try {
-          const msg = { candidate: event.candidate, initiator: this.peerId }
+          const msg = { candidate: event.candidate, initiator }
           await this.bff.publishToTopic(`${peerId}.candidate`, this.encoder.encode(JSON.stringify(msg)))
         } catch (err: any) {
           this.logger.error(`cannot publish ice candidate: ${err.toString()}`)
@@ -264,10 +264,17 @@ export class Mesh {
   private async onCandidateMessage(data: Uint8Array, peerId: string) {
     if (this.disposed) return
     try {
+      if (this.logConfig.debugIceCandidates) {
+        this.logger.info(`ICE candidate received from ${peerId}`)
+      }
+
       const { candidate, initiator } = JSON.parse(this.decoder.decode(data))
 
       const conn = (initiator === this.peerId ? this.initiatedConnections : this.receivedConnections).get(peerId)
       if (!conn) {
+        if (this.logConfig.debugWebRtcEnabled) {
+          this.logger.info(`ICE candidate received from ${peerId}, but there is no connection. ${initiator}`)
+        }
         return
       }
 
@@ -303,7 +310,7 @@ export class Mesh {
     }
 
     const offer = JSON.parse(this.decoder.decode(data))
-    const instance = this.createConnection(peerId)
+    const instance = this.createConnection(peerId, peerId)
     const conn: Connection = { instance, createTimestamp: Date.now() }
     this.receivedConnections.set(peerId, conn)
 
