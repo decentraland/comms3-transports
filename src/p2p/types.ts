@@ -6,6 +6,7 @@ export type P2PLogConfig = {
   verbose: boolean
   debugWebRtcEnabled: boolean
   debugUpdateNetwork: boolean
+  debugIceCandidates: boolean
 }
 
 export type ReceivedRelayData = {

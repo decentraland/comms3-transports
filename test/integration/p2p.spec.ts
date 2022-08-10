@@ -50,7 +50,8 @@ describe('p2p', () => {
         logConfig: {
           verbose: false,
           debugWebRtcEnabled: false,
-          debugUpdateNetwork: false
+          debugUpdateNetwork: false,
+          debugIceCandidates: false
         }
       },
       peers

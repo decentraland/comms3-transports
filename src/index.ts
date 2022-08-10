@@ -23,6 +23,7 @@ export type TransportsConfig = {
     verbose?: boolean
     debugWebRtcEnabled?: boolean
     debugUpdateNetwork?: boolean
+    debugIceCandidates?: boolean
     relaySuspensionConfig?: RelaySuspensionConfig
   }
   ws: {
@@ -90,7 +91,8 @@ export function createTransport(
         logConfig: {
           verbose: !!config.p2p.verbose,
           debugWebRtcEnabled: !!config.p2p.debugWebRtcEnabled,
-          debugUpdateNetwork: !!config.p2p.debugUpdateNetwork
+          debugUpdateNetwork: !!config.p2p.debugUpdateNetwork,
+          debugIceCandidates: !!config.p2p.debugIceCandidates
         },
         relaySuspensionConfig: config.p2p.relaySuspensionConfig
       },
