@@ -2,6 +2,7 @@ import { IslandChangedMessage } from './proto/archipelago'
 import { BFFConnection, ILogger, Position3D, Transport } from './types'
 import { WsTransport } from './ws/WsTransport'
 import { LivekitTransport } from './livekit/LivekitTransport'
+import { Room as LiveKitRoom } from 'livekit-client'
 import { P2PTransport, RelaySuspensionConfig } from './p2p/PeerToPeerTransport'
 
 export * from './DummyTransport'
@@ -18,6 +19,7 @@ export type TransportsConfig = {
   peerId: string
   livekit: {
     verbose?: boolean
+    onRoomConnected?: (room: LiveKitRoom) => void
   }
   p2p: {
     verbose?: boolean
@@ -70,7 +72,8 @@ export function createTransport(
       token,
       peerId,
       islandId,
-      verbose: !!config.livekit.verbose
+      verbose: !!config.livekit.verbose,
+      onRoomConnected: config.livekit.onRoomConnected
     })
   }
 
