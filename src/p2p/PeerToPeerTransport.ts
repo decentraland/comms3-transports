@@ -307,10 +307,10 @@ export class P2PTransport {
 
   private handlePeerPacket(data: Uint8Array, peerId: string) {
     if (this.disposed) return
-    data = new Uint8Array(data)
     this.statisticsCollector.onBytesRecv(data.length)
     try {
       const packet = Packet.decode(Reader.create(data))
+
       const now = Date.now()
       const packetKey = `${packet.src}_${packet.instanceId}_${packet.sequenceId}`
       const alreadyReceived = !!this.receivedPackets[packetKey]
