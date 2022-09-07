@@ -86,11 +86,14 @@ export class Mesh {
 
     this.debugWebRtc(`Opening dc for ${peerId}`)
     const dc = instance.createDataChannel('data')
+    dc.binaryType = 'arraybuffer'
     dc.addEventListener('open', () => {
       conn.dc = dc
     })
-    dc.addEventListener('message', (event) => {
-      this.packetHandler(event.data, peerId)
+    dc.addEventListener('message', async (event) => {
+      const data = new Uint8Array(event.data)
+
+      this.packetHandler(data, peerId)
     })
 
     const offer = await instance.createOffer({
@@ -263,30 +266,37 @@ export class Mesh {
 
   private async onCandidateMessage(data: Uint8Array, peerId: string) {
     if (this.disposed) return
+
+    if (this.logConfig.debugIceCandidates) {
+      this.logger.info(`ICE candidate received from ${peerId}`)
+    }
+
+    const { candidate, initiator } = JSON.parse(this.decoder.decode(data))
+
     try {
-      if (this.logConfig.debugIceCandidates) {
-        this.logger.info(`ICE candidate received from ${peerId}`)
-      }
-
-      const { candidate, initiator } = JSON.parse(this.decoder.decode(data))
-
       const conn = (initiator === this.peerId ? this.initiatedConnections : this.receivedConnections).get(peerId)
       if (!conn) {
         if (this.logConfig.debugWebRtcEnabled) {
-          this.logger.info(`ICE candidate received from ${peerId}, but there is no connection. ${initiator}`)
+          this.logger.info(
+            `ICE candidate received from ${peerId}, but there is no connection. (initiator: ${
+              initiator === this.peerId ? 'us' : 'them'
+            })`
+          )
         }
         return
       }
 
       const state = conn.instance.connectionState
-      if (state !== 'connecting' && state !== 'new') {
+      if (state !== 'connecting' && state !== 'new' && state !== 'connected') {
         this.debugWebRtc(`No setting ice candidate for ${peerId}, connection is in state ${state}`)
         return
       }
 
       await conn.instance.addIceCandidate(candidate)
     } catch (e: any) {
-      this.logger.error(`Failed to add ice candidate: ${e.toString()}`)
+      this.logger.error(
+        `Failed to add ice candidate: ${e.toString()} (initiator: ${initiator === this.peerId ? 'us' : 'them'})`
+      )
     }
   }
 
