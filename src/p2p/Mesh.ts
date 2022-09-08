@@ -342,12 +342,14 @@ export class Mesh {
     instance.addEventListener('datachannel', (event) => {
       this.debugWebRtc(`Got data channel from ${peerId}`)
       const dc = event.channel
+      dc.binaryType = 'arraybuffer'
       dc.addEventListener('open', () => {
         conn.dc = dc
       })
 
       dc.addEventListener('message', (event) => {
-        this.packetHandler(event.data, peerId)
+        const data = new Uint8Array(event.data)
+        this.packetHandler(data, peerId)
       })
     })
 
