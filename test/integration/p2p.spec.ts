@@ -48,7 +48,7 @@ describe('p2p', () => {
         peerId,
         islandId,
         logConfig: {
-          verbose: false,
+          debugMesh: false,
           debugWebRtcEnabled: false,
           debugUpdateNetwork: false,
           debugIceCandidates: false
