@@ -81,9 +81,9 @@ export class P2PTransport {
   private updatingNetwork: boolean = false
   private currentMessageId: number = 0
   private instanceId: number
-  private expireTimeoutId: NodeJS.Timeout | number
-  private updateNetworkTimeoutId: NodeJS.Timeout | number | null = null
-  private pingTimeoutId?: NodeJS.Timeout | number
+  private expireTimeoutId: NodeJS.Timeout
+  private updateNetworkTimeoutId: NodeJS.Timeout | null = null
+  private pingTimeoutId?: NodeJS.Timeout
   private disposed: boolean = false
   private activePings: Record<string, ActivePing> = {}
 
@@ -270,10 +270,10 @@ export class P2PTransport {
 
     this.disposed = true
     if (this.updateNetworkTimeoutId) {
-      clearTimeout(this.updateNetworkTimeoutId as any)
+      clearTimeout(this.updateNetworkTimeoutId)
     }
-    clearTimeout(this.expireTimeoutId as any)
-    clearTimeout(this.pingTimeoutId as any)
+    clearTimeout(this.expireTimeoutId)
+    clearTimeout(this.pingTimeoutId)
 
     if (this.onPeerJoinedListener) {
       await this.bffConnection.removeSystemTopicListener(this.onPeerJoinedListener)
