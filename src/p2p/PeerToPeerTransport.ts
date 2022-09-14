@@ -453,23 +453,12 @@ export class P2PTransport {
 
   private expireKnownPeers(currentTimestamp: number) {
     Object.keys(this.knownPeers).forEach((id) => {
-      const lastUpdate = this.knownPeers[id].lastUpdated
-      if (lastUpdate && currentTimestamp - lastUpdate > KNOWN_PEERS_EXPIRE_TIME) {
-        if (this.mesh.isConnectedTo(id)) {
-          this.disconnectFrom(id)
+      // We expire reachable through data
+      Object.keys(this.knownPeers[id].reachableThrough).forEach((relayId) => {
+        if (currentTimestamp - this.knownPeers[id].reachableThrough[relayId].timestamp > KNOWN_PEER_RELAY_EXPIRE_TIME) {
+          delete this.knownPeers[id].reachableThrough[relayId]
         }
-        delete this.knownPeers[id]
-      } else {
-        // We expire reachable through data
-        Object.keys(this.knownPeers[id].reachableThrough).forEach((relayId) => {
-          if (
-            currentTimestamp - this.knownPeers[id].reachableThrough[relayId].timestamp >
-            KNOWN_PEER_RELAY_EXPIRE_TIME
-          ) {
-            delete this.knownPeers[id].reachableThrough[relayId]
-          }
-        })
-      }
+      })
     })
   }
 
