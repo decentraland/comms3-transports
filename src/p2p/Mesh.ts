@@ -64,7 +64,7 @@ export class Mesh {
       return
     }
 
-    this.logger.log(`Connecting to ${peerId}. ${reason}`)
+    this.debugWebRtc(`Connecting to ${peerId}. ${reason}`)
 
     const instance = this.createConnection(peerId, this.peerId)
     const conn: Connection = { instance, createTimestamp: Date.now() }
@@ -128,7 +128,7 @@ export class Mesh {
   }
 
   public disconnectFrom(peerId: string): void {
-    this.logger.log(`Disconnecting from ${peerId}`)
+    this.debugWebRtc(`Disconnecting from ${peerId}`)
     let conn = this.initiatedConnections.get(peerId)
     if (conn) {
       conn.instance.close()
