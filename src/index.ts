@@ -20,10 +20,10 @@ export type TransportsConfig = {
     verbose?: boolean
   }
   p2p: {
-    verbose?: boolean
     debugWebRtcEnabled?: boolean
     debugUpdateNetwork?: boolean
     debugIceCandidates?: boolean
+    debugMesh?: boolean
     relaySuspensionConfig?: RelaySuspensionConfig
   }
   ws: {
@@ -89,10 +89,10 @@ export function createTransport(
         islandId,
         selfPosition: config.selfPosition,
         logConfig: {
-          verbose: !!config.p2p.verbose,
           debugWebRtcEnabled: !!config.p2p.debugWebRtcEnabled,
           debugUpdateNetwork: !!config.p2p.debugUpdateNetwork,
-          debugIceCandidates: !!config.p2p.debugIceCandidates
+          debugIceCandidates: !!config.p2p.debugIceCandidates,
+          debugMesh: !!config.p2p.debugMesh
         },
         relaySuspensionConfig: config.p2p.relaySuspensionConfig
       },

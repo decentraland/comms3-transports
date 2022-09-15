@@ -52,7 +52,6 @@ type PacketData = {
 const MAX_CONNECTION_DISTANCE = 4
 const DISCONNECT_DISTANCE = 5
 const EXPIRATION_LOOP_INTERVAL = 2000
-const KNOWN_PEERS_EXPIRE_TIME = 90000
 const KNOWN_PEER_RELAY_EXPIRE_TIME = 30000
 const UPDATE_NETWORK_INTERVAL = 30000
 const DEFAULT_TTL = 10
@@ -82,9 +81,9 @@ export class P2PTransport {
   private updatingNetwork: boolean = false
   private currentMessageId: number = 0
   private instanceId: number
-  private expireTimeoutId: NodeJS.Timeout | number
-  private updateNetworkTimeoutId: NodeJS.Timeout | number | null = null
-  private pingTimeoutId?: NodeJS.Timeout | number
+  private expireTimeoutId: NodeJS.Timeout
+  private updateNetworkTimeoutId: NodeJS.Timeout | null = null
+  private pingTimeoutId?: NodeJS.Timeout
   private disposed: boolean = false
   private activePings: Record<string, ActivePing> = {}
 
@@ -112,14 +111,14 @@ export class P2PTransport {
         }
 
         if (!this.isKnownPeer(peerId)) {
-          if (this.logConfig.verbose) {
+          if (this.logConfig.debugMesh) {
             this.logger.log('Rejecting offer from unknown peer')
           }
           return false
         }
 
         if (this.mesh.connectedCount() >= DEFAULT_TARGET_CONNECTIONS) {
-          if (this.logConfig.verbose) {
+          if (this.logConfig.debugMesh) {
             this.logger.log('Rejecting offer, already enough connections')
           }
           return false
@@ -271,10 +270,10 @@ export class P2PTransport {
 
     this.disposed = true
     if (this.updateNetworkTimeoutId) {
-      clearTimeout(this.updateNetworkTimeoutId as any)
+      clearTimeout(this.updateNetworkTimeoutId)
     }
-    clearTimeout(this.expireTimeoutId as any)
-    clearTimeout(this.pingTimeoutId as any)
+    clearTimeout(this.expireTimeoutId)
+    clearTimeout(this.pingTimeoutId)
 
     if (this.onPeerJoinedListener) {
       await this.bffConnection.removeSystemTopicListener(this.onPeerJoinedListener)
@@ -352,7 +351,7 @@ export class P2PTransport {
       } else {
         if (peerId === packet.src) {
           // NOTE(hugo): not part of the original implementation
-          if (this.logConfig.verbose) {
+          if (this.logConfig.debugMesh) {
             this.logger.log(
               `Skip requesting relay suspension for direct packet, already received: ${alreadyReceived}, expired: ${expired}`
             )
@@ -453,23 +452,12 @@ export class P2PTransport {
 
   private expireKnownPeers(currentTimestamp: number) {
     Object.keys(this.knownPeers).forEach((id) => {
-      const lastUpdate = this.knownPeers[id].lastUpdated
-      if (lastUpdate && currentTimestamp - lastUpdate > KNOWN_PEERS_EXPIRE_TIME) {
-        if (this.mesh.isConnectedTo(id)) {
-          this.disconnectFrom(id)
+      // We expire reachable through data
+      Object.keys(this.knownPeers[id].reachableThrough).forEach((relayId) => {
+        if (currentTimestamp - this.knownPeers[id].reachableThrough[relayId].timestamp > KNOWN_PEER_RELAY_EXPIRE_TIME) {
+          delete this.knownPeers[id].reachableThrough[relayId]
         }
-        delete this.knownPeers[id]
-      } else {
-        // We expire reachable through data
-        Object.keys(this.knownPeers[id].reachableThrough).forEach((relayId) => {
-          if (
-            currentTimestamp - this.knownPeers[id].reachableThrough[relayId].timestamp >
-            KNOWN_PEER_RELAY_EXPIRE_TIME
-          ) {
-            delete this.knownPeers[id].reachableThrough[relayId]
-          }
-        })
-      }
+      })
     })
   }
 
@@ -509,7 +497,7 @@ export class P2PTransport {
         durationMillis: relaySuspensionDuration
       }
 
-      if (this.logConfig.verbose) {
+      if (this.logConfig.debugMesh) {
         this.logger.log(`Requesting relay suspension to ${peerId} ${JSON.stringify(suspendRelayData)}`)
       }
 
@@ -538,7 +526,7 @@ export class P2PTransport {
       return
     }
 
-    if (this.logConfig.verbose) {
+    if (this.logConfig.debugMesh) {
       this.logger.log(`Consolidating suspension for ${packet.src}->${connectedPeerId}`)
     }
 
@@ -552,13 +540,13 @@ export class P2PTransport {
         !this.isRelayFromConnectionSuspended(it.id, packet.src, now)
     )
 
-    if (this.logConfig.verbose) {
+    if (this.logConfig.debugMesh) {
       this.logger.log(`${packet.src} is reachable through ${JSON.stringify(reachableThrough)}`)
     }
 
     // We only suspend if we will have at least 1 path of connection for this peer after suspensions
     if (reachableThrough.length > 1 || (reachableThrough.length === 1 && reachableThrough[0].id !== connectedPeerId)) {
-      if (this.logConfig.verbose) {
+      if (this.logConfig.debugMesh) {
         this.logger.log(`Will add suspension for ${packet.src} -> ${connectedPeerId}`)
       }
       relayData.pendingSuspensionRequests.push(packet.src)
@@ -773,7 +761,7 @@ export class P2PTransport {
           this.peerSortCriteria()
         )
 
-        if (this.logConfig.verbose) {
+        if (this.logConfig.debugUpdateNetwork) {
           this.logger.log(`Picked connection candidates ${JSON.stringify(candidates)} `)
         }
 
@@ -828,7 +816,7 @@ export class P2PTransport {
   }
 
   private calculateNextNetworkOperation(connectionCandidates: KnownPeerData[]): NetworkOperation | undefined {
-    if (this.logConfig.verbose) {
+    if (this.logConfig.debugUpdateNetwork) {
       this.logger.log(`Calculating network operation with candidates ${JSON.stringify(connectionCandidates)}`)
     }
 
@@ -837,7 +825,9 @@ export class P2PTransport {
     // If we are over the max amount of connections, we discard the "worst"
     const toDisconnect = this.mesh.connectedCount() - DEFAULT_MAX_CONNECTIONS
     if (toDisconnect > 0) {
-      this.logger.log(`Too many connections. Need to disconnect from: ${toDisconnect}`)
+      if (this.logConfig.debugUpdateNetwork) {
+        this.logger.log(`Too many connections. Need to disconnect from: ${toDisconnect}`)
+      }
       return async () => {
         Object.values(this.knownPeers)
           .filter((peer) => this.mesh.isConnectedTo(peer.id))
