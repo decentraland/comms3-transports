@@ -96,7 +96,7 @@ export class WsTransport {
     const packet: WsPacket = {
       message: {
         $case: 'peerUpdateMessage',
-        peerUpdateMessage: { body, fromAlias: 0, time: 0 }
+        peerUpdateMessage: { body, fromAlias: 0 }
       }
     }
 
@@ -144,7 +144,6 @@ export class WsTransport {
 
         this.onMessageObservable.notifyObservers({
           peer: userId,
-          time: peerUpdateMessage.time,
           payload: peerUpdateMessage.body
         })
         break
