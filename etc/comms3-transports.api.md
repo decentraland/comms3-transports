@@ -63,6 +63,7 @@ export type Transport = {
 export type TransportMessage = {
     payload: Uint8Array;
     peer: string;
+    time: number;
 };
 
 // @public

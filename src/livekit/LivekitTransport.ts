@@ -106,6 +106,7 @@ export class LivekitTransport {
   handleMessage(peerId: string, data: Uint8Array) {
     this.statisticsCollector.onBytesRecv(data.length)
     this.onMessageObservable.notifyObservers({
+      time: Date.now(),
       peer: peerId,
       payload: data
     })

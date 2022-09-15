@@ -391,6 +391,7 @@ export class P2PTransport {
         const { messageData } = packet.data
         if (messageData.room === this.islandId) {
           this.onMessageObservable.notifyObservers({
+            time: Date.now(), // TODO
             peer: packet.src,
             payload: messageData.payload
           })
