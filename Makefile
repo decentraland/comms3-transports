@@ -28,15 +28,41 @@ protoc3/bin/protoc:
 	chmod +x protoc3/bin/protoc
 
 build-proto: protoc3/bin/protoc
+	mkdir -p "$(PWD)/src/proto/bff"
 	protoc3/bin/protoc \
-		--plugin=./node_modules/.bin/protoc-gen-ts_proto \
-		--ts_proto_opt=esModuleInterop=true,oneof=unions\
-		--ts_proto_out="$(PWD)/src/proto" \
-		-I="$(PWD)/src/proto" \
-		"$(PWD)/src/proto/comms.proto"  \
-		"$(PWD)/src/proto/p2p.proto"  \
-		"$(PWD)/src/proto/ws.proto"  \
-		"$(PWD)/src/proto/archipelago.proto" 
+			--plugin=./node_modules/.bin/protoc-gen-ts_proto \
+		  --ts_proto_opt=esModuleInterop=true,returnObservable=false,outputServices=generic-definitions,oneof=unions \
+			--ts_proto_opt=fileSuffix=.gen \
+			--ts_proto_out="$(PWD)/src/proto/bff" \
+      -I="$(PWD)/node_modules/@dcl/protocol/bff" \
+			"$(PWD)/node_modules/@dcl/protocol/bff/authentication-service.proto" \
+			"$(PWD)/node_modules/@dcl/protocol/bff/comms-service.proto"
+
+	protoc3/bin/protoc \
+			--plugin=./node_modules/.bin/protoc-gen-ts_proto \
+		  --ts_proto_opt=esModuleInterop=true,returnObservable=false,outputServices=generic-definitions,oneof=unions \
+			--ts_proto_opt=fileSuffix=.gen \
+			--ts_proto_out="$(PWD)/src/proto" \
+      -I="$(PWD)/node_modules/@dcl/protocol/kernel/comms" \
+			"$(PWD)/node_modules/@dcl/protocol/kernel/comms/ws-comms-rfc-5.proto" 
+
+	protoc3/bin/protoc \
+			--plugin=./node_modules/.bin/protoc-gen-ts_proto \
+		  --ts_proto_opt=esModuleInterop=true,returnObservable=false,outputServices=generic-definitions,oneof=unions \
+			--ts_proto_opt=fileSuffix=.gen \
+			--ts_proto_out="$(PWD)/src/proto" \
+      -I="$(PWD)/node_modules/@dcl/protocol/kernel/comms/v3" \
+			"$(PWD)/node_modules/@dcl/protocol/kernel/comms/v3/archipelago.proto" \
+			"$(PWD)/node_modules/@dcl/protocol/kernel/comms/v3/comms.proto" 
+
+	# TODO: move p2p to dcl/protocol
+	protoc3/bin/protoc \
+			--plugin=./node_modules/.bin/protoc-gen-ts_proto \
+		  --ts_proto_opt=esModuleInterop=true,returnObservable=false,outputServices=generic-definitions,oneof=unions \
+			--ts_proto_opt=fileSuffix=.gen \
+			--ts_proto_out="$(PWD)/src/proto/" \
+      -I="$(PWD)/src/proto" \
+			"$(PWD)/src/proto/p2p.proto"
 
 test:
 	node_modules/.bin/jest --detectOpenHandles --colors --runInBand $(TESTARGS)

@@ -12,8 +12,8 @@ import {
   SendOpts
 } from '../types'
 import { StatisticsCollector } from '../statistics'
-import { JoinIslandMessage, LeftIslandMessage } from '../proto/archipelago'
-import { SuspendRelayData, PingData, PongData, Packet, MessageData } from '../proto/p2p'
+import { JoinIslandMessage, LeftIslandMessage } from '../proto/archipelago.gen'
+import { SuspendRelayData, PingData, PongData, Packet, MessageData } from '../proto/p2p.gen'
 import { Mesh } from './Mesh'
 import { pickBy, randomUint32, discretizedPositionDistanceXZ } from './utils'
 import { PeerMessageType, PongMessageType, PingMessageType, PeerMessageTypes, SuspendRelayType } from './messageTypes'

@@ -3,7 +3,7 @@ import { Observable } from 'mz-observable'
 
 import { ILogger, SendOpts, TransportMessage, Position3D } from '../types'
 import { StatisticsCollector } from '../statistics'
-import { WsMessage } from '../proto/ws'
+import { WsPacket } from '../proto/ws-comms-rfc-5.gen'
 
 export type LogConfig = {
   verbose: boolean
@@ -60,7 +60,7 @@ export class WsTransport {
 
     return new Promise<void>((resolve, reject) => {
       try {
-        this.ws = new WebSocket(this.url, 'comms')
+        this.ws = new WebSocket(this.url, 'comms-ws-transport')
         this.ws.binaryType = 'arraybuffer'
       } catch (err) {
         return reject(err)
@@ -90,19 +90,17 @@ export class WsTransport {
     })
   }
 
-  async send(body: Uint8Array, { identity }: SendOpts): Promise<void> {
+  async send(body: Uint8Array, _: SendOpts): Promise<void> {
     if (!this.ws) throw new Error('This transport is closed')
 
-    const message: WsMessage = { data: undefined }
-
-    const fromAlias = 0 // NOTE: this will be overriden by the server
-    if (identity) {
-      message.data = { $case: 'identityMessage', identityMessage: { body, fromAlias, identity: '' } }
-    } else {
-      message.data = { $case: 'systemMessage', systemMessage: { body, fromAlias } }
+    const packet: WsPacket = {
+      message: {
+        $case: 'peerUpdateMessage',
+        peerUpdateMessage: { body, fromAlias: 0 }
+      }
     }
 
-    const d = WsMessage.encode(message).finish()
+    const d = WsPacket.encode(packet).finish()
     this.ws.send(d)
   }
 
@@ -119,24 +117,24 @@ export class WsTransport {
   }
 
   async onWsMessage(event: MessageEvent) {
-    let message: WsMessage
+    let packet: WsPacket
     try {
-      message = WsMessage.decode(Reader.create(new Uint8Array(event.data)))
+      packet = WsPacket.decode(Reader.create(new Uint8Array(event.data)))
     } catch (e: any) {
       this.logger.error(`cannot process message ${e.toString()}`)
       return
     }
 
-    if (!message.data) {
+    if (!packet.message) {
       return
     }
 
-    const { $case } = message.data
+    const { $case } = packet.message
 
     switch ($case) {
-      case 'systemMessage': {
-        const { systemMessage } = message.data
-        const userId = this.aliases[systemMessage.fromAlias]
+      case 'peerUpdateMessage': {
+        const { peerUpdateMessage } = packet.message
+        const userId = this.aliases[peerUpdateMessage.fromAlias]
         if (!userId) {
           if (this.logConfig.verbose) {
             this.logger.log('Ignoring system message from unkown peer')
@@ -146,19 +144,20 @@ export class WsTransport {
 
         this.onMessageObservable.notifyObservers({
           peer: userId,
-          payload: systemMessage.body
+          payload: peerUpdateMessage.body
         })
         break
       }
-      case 'identityMessage': {
-        const { identityMessage } = message.data
-        const userId = identityMessage.identity
-        this.aliases[identityMessage.fromAlias] = userId
-
-        this.onMessageObservable.notifyObservers({
-          peer: userId,
-          payload: identityMessage.body
-        })
+      case 'peerJoinMessage': {
+        const { peerJoinMessage } = packet.message
+        this.aliases[peerJoinMessage.alias] = peerJoinMessage.address
+        break
+      }
+      case 'welcomeMessage': {
+        const { welcomeMessage } = packet.message
+        for (const alias in welcomeMessage.peerIdentities) {
+          this.aliases[alias] = welcomeMessage.peerIdentities[alias]
+        }
         break
       }
       default: {

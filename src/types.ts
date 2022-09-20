@@ -38,15 +38,11 @@ export type TransportMessage = {
 }
 
 /**
- * A message from a transport
- * NOTE: identity is a hint to the transport, the transport may choose to augment
- * the message with peer identity data if the protocol itself doesn't have its
- * own way of identifying the peer
+ * Send options
  * @public
  */
 export type SendOpts = {
   reliable: boolean
-  identity?: boolean
 }
 
 /**
