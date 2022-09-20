@@ -3,7 +3,7 @@ import { Observable } from 'mz-observable'
 
 import { ILogger, SendOpts, TransportMessage, Position3D } from '../types'
 import { StatisticsCollector } from '../statistics'
-import { WsPacket } from '../proto/ws'
+import { WsPacket } from '../proto/ws-comms-rfc-5.gen'
 
 export type LogConfig = {
   verbose: boolean
@@ -150,8 +150,7 @@ export class WsTransport {
       }
       case 'peerJoinMessage': {
         const { peerJoinMessage } = packet.message
-        const userId = peerJoinMessage.identity
-        this.aliases[peerJoinMessage.alias] = userId
+        this.aliases[peerJoinMessage.alias] = peerJoinMessage.address
         break
       }
       case 'welcomeMessage': {

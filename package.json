@@ -41,6 +41,7 @@
     "wrtc": "^0.4.7"
   },
   "dependencies": {
+    "@dcl/protocol": "^1.0.0-3091042060.commit-417e01c",
     "dotenv": "^16.0.1",
     "fp-future": "^1.0.1",
     "livekit-client": "^1.1.2",

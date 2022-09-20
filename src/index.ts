@@ -1,4 +1,4 @@
-import { IslandChangedMessage } from './proto/archipelago'
+import { IslandChangedMessage } from './proto/archipelago.gen'
 import { BFFConnection, ILogger, Position3D, Transport } from './types'
 import { WsTransport } from './ws/WsTransport'
 import { LivekitTransport } from './livekit/LivekitTransport'

@@ -5,6 +5,6 @@ tsdoc-metadata.json
 coverage
 
 protoc3/
-src/proto/*.ts
+src/proto/**/*.gen.ts
 
 .env
