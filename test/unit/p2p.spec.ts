@@ -7,6 +7,7 @@ registerGlobals()
 
 import { P2PTransport } from '../../src/p2p/PeerToPeerTransport'
 import { Position3D } from '../../src/types'
+import { StatisticsCollector } from '../../src/statistics'
 
 describe('p2p', () => {
   const islandId = 'I1'
@@ -45,7 +46,8 @@ describe('p2p', () => {
           debugWebRtcEnabled: false,
           debugUpdateNetwork: false,
           debugIceCandidates: false
-        }
+        },
+        statisticsCollector: new StatisticsCollector
       },
       peers
     )

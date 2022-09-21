@@ -1,9 +1,9 @@
 import { Reader } from 'protobufjs/minimal'
-import { Observable } from 'mz-observable'
 
-import { ILogger, SendOpts, TransportMessage, Position3D } from '../types'
+import { CommsV3Transport, ILogger, MinimumTransport, Position3D } from '../types'
 import { StatisticsCollector } from '../statistics'
 import { WsPacket } from '../proto/ws-comms-rfc-5.gen'
+import mitt from 'mitt'
 
 export type LogConfig = {
   verbose: boolean
@@ -12,17 +12,14 @@ export type LogConfig = {
 export type WsConfig = {
   logger: ILogger
   url: string
-  peerId: string
-  islandId: string
   logConfig: LogConfig
+  statisticsCollector: StatisticsCollector
 }
 
-export class WsTransport {
+export class WsTransport implements CommsV3Transport {
   public readonly name = 'ws'
-  public readonly peerId: string
-  public readonly islandId: string
-  public onDisconnectObservable = new Observable<void>()
-  public onMessageObservable = new Observable<TransportMessage>()
+  public readonly events = mitt<MinimumTransport.Events>()
+
   private aliases: Record<number, string> = {}
   private ws: WebSocket | null = null
   private logger: ILogger
@@ -30,28 +27,14 @@ export class WsTransport {
   private statisticsCollector: StatisticsCollector
   public logConfig: LogConfig
 
-  constructor({ logger, url, peerId, islandId, logConfig }: WsConfig) {
-    this.peerId = peerId
-    this.islandId = islandId
+  constructor({ logger, url, logConfig, statisticsCollector }: WsConfig) {
     this.logger = logger
     this.url = url
     this.logConfig = logConfig
-    this.statisticsCollector = new StatisticsCollector()
+    this.statisticsCollector = statisticsCollector
   }
 
   onPeerPositionChange(_: string, __: Position3D) {}
-
-  startStatistics() {
-    this.statisticsCollector.start()
-  }
-
-  stopStatistics() {
-    this.statisticsCollector.stop()
-  }
-
-  collectStatistics() {
-    return this.statisticsCollector.collectStatistics()
-  }
 
   async connect(): Promise<void> {
     if (this.ws) {
@@ -90,7 +73,7 @@ export class WsTransport {
     })
   }
 
-  async send(body: Uint8Array, _: SendOpts): Promise<void> {
+  async send(body: Uint8Array): Promise<void> {
     if (!this.ws) throw new Error('This transport is closed')
 
     const packet: WsPacket = {
@@ -101,6 +84,7 @@ export class WsTransport {
     }
 
     const d = WsPacket.encode(packet).finish()
+    this.statisticsCollector.onBytesSent(d.length)
     this.ws.send(d)
   }
 
@@ -112,14 +96,16 @@ export class WsTransport {
       ws.onerror = null
       ws.onclose = null
       ws.close()
-      this.onDisconnectObservable.notifyObservers()
+      this.events.emit('DISCONNECTION', { kicked: false })
     }
   }
 
   async onWsMessage(event: MessageEvent) {
     let packet: WsPacket
     try {
-      packet = WsPacket.decode(Reader.create(new Uint8Array(event.data)))
+      const data = new Uint8Array(event.data)
+      this.statisticsCollector.onBytesRecv(data.length)
+      packet = WsPacket.decode(Reader.create(data))
     } catch (e: any) {
       this.logger.error(`cannot process message ${e.toString()}`)
       return
@@ -142,9 +128,9 @@ export class WsTransport {
           return
         }
 
-        this.onMessageObservable.notifyObservers({
-          peer: address,
-          payload: peerUpdateMessage.body
+        this.events.emit('message', {
+          address,
+          data: peerUpdateMessage.body
         })
         break
       }

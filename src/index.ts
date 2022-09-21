@@ -1,11 +1,13 @@
 import { IslandChangedMessage } from './proto/archipelago.gen'
-import { BFFConnection, ILogger, Position3D, Transport } from './types'
+import { BFFConnection, ILogger, Position3D, CommsV3Transport } from './types'
 import { WsTransport } from './ws/WsTransport'
 import { LivekitTransport } from './livekit/LivekitTransport'
 import { P2PTransport, RelaySuspensionConfig } from './p2p/PeerToPeerTransport'
+import { StatisticsCollector } from './statistics'
+export { StatisticsCollector } from './statistics'
 
 export * from './DummyTransport'
-export { TransportMessage, Position3D, TransportName, Transport } from './types'
+export { MinimumTransport, Position3D, TransportName, CommsV3Transport as Transport } from './types'
 
 /**
  * Transports config
@@ -28,7 +30,8 @@ export type TransportsConfig = {
   }
   ws: {
     verbose?: boolean
-  }
+  },
+  statisticsCollector: StatisticsCollector
 }
 
 /**
@@ -38,7 +41,7 @@ export type TransportsConfig = {
 export function createTransport(
   config: TransportsConfig,
   islandChangedMessage: IslandChangedMessage
-): Transport | null {
+): CommsV3Transport | null {
   const connStr = islandChangedMessage.connStr
   const { logger, peerId, bff } = config
 
@@ -49,11 +52,10 @@ export function createTransport(
     return new WsTransport({
       logger,
       url,
-      peerId,
-      islandId,
       logConfig: {
         verbose: !!config.ws.verbose
-      }
+      },
+      statisticsCollector: config.statisticsCollector
     })
   }
 
@@ -70,7 +72,8 @@ export function createTransport(
       token,
       peerId,
       islandId,
-      verbose: !!config.livekit.verbose
+      verbose: !!config.livekit.verbose,
+      statisticsCollector: config.statisticsCollector
     })
   }
 
@@ -94,7 +97,8 @@ export function createTransport(
           debugIceCandidates: !!config.p2p.debugIceCandidates,
           debugMesh: !!config.p2p.debugMesh
         },
-        relaySuspensionConfig: config.p2p.relaySuspensionConfig
+        relaySuspensionConfig: config.p2p.relaySuspensionConfig,
+        statisticsCollector: config.statisticsCollector
       },
       peers
     )

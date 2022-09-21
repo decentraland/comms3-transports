@@ -13,7 +13,7 @@ import { Observable } from 'mz-observable';
 export function createTransport(config: TransportsConfig, islandChangedMessage: IslandChangedMessage): Transport | null;
 
 // @public
-export class DummyTransport {
+export class DummyTransport implements Transport {
     // (undocumented)
     collectStatistics(): undefined;
     // (undocumented)

@@ -8,7 +8,7 @@ import { registerGlobals } from '../helpers/globals'
 registerGlobals()
 
 import { WsTransport } from '../../src/ws/WsTransport'
-import { TransportMessage } from '../../src/Transport'
+import { StatisticsCollector } from '../../src/statistics'
 
 const WS_URL = process.env.TEST_WS_URL
 const WS_SECRET = process.env.TEST_WS_SECRET
@@ -27,7 +27,9 @@ describe('ws', () => {
 
     const transport = new WsTransport({
       logger,
-      url: `${url}?access_token=${token}`
+      url: `${url}?access_token=${token}`,
+      logConfig: {verbose: true},
+      statisticsCollector: new StatisticsCollector
     })
     return transport
   }
@@ -43,19 +45,19 @@ describe('ws', () => {
       await t2.connect()
 
       const p1 = new Promise((resolve) => {
-        t1.onMessageObservable.add(({ peer, payload }: TransportMessage) => {
-          resolve([peer, decoder.decode(payload)])
+        t1.events.on('message', ({ address, data }) => {
+          resolve([address, decoder.decode(data)])
         })
       })
 
       const p2 = new Promise((resolve) => {
-        t2.onMessageObservable.add(({ peer, payload }: TransportMessage) => {
-          resolve([peer, decoder.decode(payload)])
+        t2.events.on('message', ({ address, data }) => {
+          resolve([address, decoder.decode(data)])
         })
       })
 
-      t1.send(encoder.encode(data), { reliable: true, identity: true })
-      t2.send(encoder.encode(data), { reliable: true, identity: true })
+      t1.send(encoder.encode(data))
+      t2.send(encoder.encode(data))
 
       expect(await p1).toEqual(['peer2', data])
       expect(await p2).toEqual(['peer1', data])
