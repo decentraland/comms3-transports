@@ -17,6 +17,9 @@ export type MinimumTransport = {
   connect(): Promise<void>
 }
 
+/**
+ * @public
+ */
 export namespace MinimumTransport {
   export type DisconnectionEvent = {
     /**

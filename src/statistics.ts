@@ -1,5 +1,8 @@
 import { TransportStatistics } from './types'
 
+/**
+ * @public
+ */
 export class StatisticsCollector {
   private startTime = 0
   private bytesSent = 0

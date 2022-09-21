@@ -4,8 +4,8 @@
 
 ```ts
 
+import { Emitter } from 'mitt';
 import * as _m0 from 'protobufjs/minimal';
-import { Observable } from 'mz-observable';
 
 // Warning: (ae-forgotten-export) The symbol "IslandChangedMessage" needs to be exported by the entry point index.d.ts
 //
@@ -15,54 +15,81 @@ export function createTransport(config: TransportsConfig, islandChangedMessage: 
 // @public
 export class DummyTransport implements Transport {
     // (undocumented)
-    collectStatistics(): undefined;
-    // (undocumented)
     connect(): Promise<void>;
     // (undocumented)
     disconnect(): Promise<void>;
     // (undocumented)
+    readonly events: Emitter<MinimumTransport.Events>;
+    // (undocumented)
     readonly islandId = "none";
     // (undocumented)
     readonly name = "dummy";
-    // (undocumented)
-    onDisconnectObservable: Observable<void>;
-    // (undocumented)
-    onMessageObservable: Observable<TransportMessage>;
     // (undocumented)
     onPeerPositionChange(_: string, __: Position3D): void;
     // (undocumented)
     readonly peerId = "none";
     // (undocumented)
     send(): Promise<void>;
+}
+
+// @public
+export type MinimumTransport = {
+    events: Emitter<MinimumTransport.Events>;
+    send(data: Uint8Array, hints: MinimumTransport.SendOpts): void;
+    disconnect(): Promise<void>;
+    connect(): Promise<void>;
+};
+
+// @public (undocumented)
+export namespace MinimumTransport {
     // (undocumented)
-    startStatistics(): void;
+    export type DisconnectionEvent = {
+        kicked: boolean;
+        error?: Error;
+    };
     // (undocumented)
-    stopStatistics(): void;
+    export type Events = {
+        PEER_DISCONNECTED: PeerDisconnectedEvent;
+        DISCONNECTION: DisconnectionEvent;
+        message: MessageEvent;
+    };
+    // (undocumented)
+    export type MessageEvent = {
+        data: Uint8Array;
+        address: string;
+    };
+    // (undocumented)
+    export type PeerDisconnectedEvent = {
+        address: string;
+    };
+    export type SendOpts = {
+        reliable?: boolean;
+    };
 }
 
 // @public
 export type Position3D = [number, number, number];
 
-// @public
-export type Transport = {
-    onDisconnectObservable: Observable<void>;
-    onMessageObservable: Observable<TransportMessage>;
-    name: TransportName;
-    peerId: string;
-    islandId: string;
-    startStatistics(): void;
+// @public (undocumented)
+export class StatisticsCollector {
+    // Warning: (ae-forgotten-export) The symbol "TransportStatistics" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
     collectStatistics(): TransportStatistics | undefined;
-    stopStatistics(): void;
-    connect(): Promise<void>;
-    send(msg: Uint8Array, opts: SendOpts): Promise<void>;
-    disconnect(): Promise<void>;
-    onPeerPositionChange(peerId: string, position: Position3D): void;
-};
+    // (undocumented)
+    onBytesRecv(n: number): void;
+    // (undocumented)
+    onBytesSent(n: number): void;
+    // (undocumented)
+    start(): void;
+    // (undocumented)
+    stop(): void;
+}
 
 // @public
-export type TransportMessage = {
-    payload: Uint8Array;
-    peer: string;
+export type Transport = MinimumTransport & {
+    name: TransportName;
+    onPeerPositionChange(address: string, position: Position3D): void;
 };
 
 // @public
@@ -87,15 +114,14 @@ export type TransportsConfig = {
     ws: {
         verbose?: boolean;
     };
+    statisticsCollector: StatisticsCollector;
 };
 
 // Warnings were encountered during analysis:
 //
-// src/index.ts:15:3 - (ae-forgotten-export) The symbol "ILogger" needs to be exported by the entry point index.d.ts
-// src/index.ts:16:3 - (ae-forgotten-export) The symbol "BFFConnection" needs to be exported by the entry point index.d.ts
-// src/index.ts:27:5 - (ae-forgotten-export) The symbol "RelaySuspensionConfig" needs to be exported by the entry point index.d.ts
-// src/types.ts:21:3 - (ae-forgotten-export) The symbol "TransportStatistics" needs to be exported by the entry point index.d.ts
-// src/types.ts:25:3 - (ae-forgotten-export) The symbol "SendOpts" needs to be exported by the entry point index.d.ts
+// src/index.ts:17:3 - (ae-forgotten-export) The symbol "ILogger" needs to be exported by the entry point index.d.ts
+// src/index.ts:18:3 - (ae-forgotten-export) The symbol "BFFConnection" needs to be exported by the entry point index.d.ts
+// src/index.ts:29:5 - (ae-forgotten-export) The symbol "RelaySuspensionConfig" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
