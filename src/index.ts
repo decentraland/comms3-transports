@@ -30,7 +30,7 @@ export type TransportsConfig = {
   }
   ws: {
     verbose?: boolean
-  },
+  }
   statisticsCollector: StatisticsCollector
 }
 

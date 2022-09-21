@@ -1,8 +1,6 @@
 import { Reader } from 'protobufjs/minimal'
 import { future } from 'fp-future'
-
 import {
-  TransportStatistics,
   BFFConnection,
   TopicListener,
   Position3D,

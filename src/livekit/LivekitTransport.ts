@@ -94,7 +94,7 @@ export class LivekitTransport implements CommsV3Transport {
 
   handleMessage(address: string, data: Uint8Array) {
     this.statisticsCollector.onBytesRecv(data.length)
-    this.events.emit('message',{
+    this.events.emit('message', {
       address,
       data
     })
