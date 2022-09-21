@@ -1,13 +1,6 @@
 import { Reader } from 'protobufjs/minimal'
 import { future } from 'fp-future'
-import {
-  BFFConnection,
-  TopicListener,
-  Position3D,
-  ILogger,
-  CommsV3Transport,
-  MinimumTransport
-} from '../types'
+import { BFFConnection, TopicListener, Position3D, ILogger, CommsV3Transport, MinimumTransport } from '../types'
 import { StatisticsCollector } from '../statistics'
 import { JoinIslandMessage, LeftIslandMessage } from '../proto/archipelago.gen'
 import { SuspendRelayData, PingData, PongData, Packet, MessageData } from '../proto/p2p.gen'
