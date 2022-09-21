@@ -134,8 +134,8 @@ export class WsTransport {
     switch ($case) {
       case 'peerUpdateMessage': {
         const { peerUpdateMessage } = packet.message
-        const userId = this.aliases[peerUpdateMessage.fromAlias]
-        if (!userId) {
+        const address = this.aliases[peerUpdateMessage.fromAlias]
+        if (!address) {
           if (this.logConfig.verbose) {
             this.logger.log('Ignoring system message from unkown peer')
           }
@@ -143,7 +143,7 @@ export class WsTransport {
         }
 
         this.onMessageObservable.notifyObservers({
-          peer: userId,
+          peer: address,
           payload: peerUpdateMessage.body
         })
         break

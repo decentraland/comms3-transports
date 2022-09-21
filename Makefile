@@ -52,8 +52,7 @@ build-proto: protoc3/bin/protoc
 			--ts_proto_opt=fileSuffix=.gen \
 			--ts_proto_out="$(PWD)/src/proto" \
       -I="$(PWD)/node_modules/@dcl/protocol/kernel/comms/v3" \
-			"$(PWD)/node_modules/@dcl/protocol/kernel/comms/v3/archipelago.proto" \
-			"$(PWD)/node_modules/@dcl/protocol/kernel/comms/v3/comms.proto" 
+			"$(PWD)/node_modules/@dcl/protocol/kernel/comms/v3/archipelago.proto"
 
 	# TODO: move p2p to dcl/protocol
 	protoc3/bin/protoc \
