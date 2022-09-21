@@ -8,9 +8,9 @@ registerGlobals()
 registerWebRTCGlobals()
 
 import { P2PTransport } from '../../src/p2p/PeerToPeerTransport'
-import { TransportMessage } from '../../src/Transport'
 import { Position3D } from '../../src/types'
-import { JoinIslandMessage } from '../../src/proto/archipelago'
+import { JoinIslandMessage } from '../../src/proto/archipelago.gen'
+import { StatisticsCollector } from '../../src/statistics'
 
 // SEE https://github.com/node-webrtc/node-webrtc/issues/636
 // process.on('beforeExit', (code) => process.exit(code))
@@ -52,7 +52,8 @@ describe('p2p', () => {
           debugWebRtcEnabled: false,
           debugUpdateNetwork: false,
           debugIceCandidates: false
-        }
+        },
+        statisticsCollector: new StatisticsCollector
       },
       peers
     )
@@ -84,14 +85,14 @@ describe('p2p', () => {
     await delay(100)
 
     const p1 = new Promise((resolve) => {
-      t1.onMessageObservable.add(({ peer, payload }: TransportMessage) => {
-        resolve([peer, decoder.decode(payload)])
+      t1.events.on('message', ({ address, data }) => {
+        resolve([address, decoder.decode(data)])
       })
     })
 
     const p2 = new Promise((resolve) => {
-      t2.onMessageObservable.add(({ peer, payload }: TransportMessage) => {
-        resolve([peer, decoder.decode(payload)])
+      t2.events.on('message', ({ address, data }) => {
+        resolve([address, decoder.decode(data)])
       })
     })
 

@@ -1,4 +1,3 @@
-import { Observable } from 'mz-observable'
 import {
   Room,
   RoomEvent,
@@ -9,8 +8,9 @@ import {
   DataPacket_Kind
 } from 'livekit-client'
 
-import { ILogger, SendOpts, TransportMessage, Position3D } from '../types'
+import { ILogger, Position3D, CommsV3Transport, MinimumTransport } from '../types'
 import { StatisticsCollector } from '../statistics'
+import mitt from 'mitt'
 
 export type LivekitConfig = {
   logger: ILogger
@@ -19,14 +19,15 @@ export type LivekitConfig = {
   peerId: string
   islandId: string
   verbose: boolean
+  statisticsCollector: StatisticsCollector
 }
 
-export class LivekitTransport {
+export class LivekitTransport implements CommsV3Transport {
   public readonly name = 'livekit'
   public readonly peerId: string
   public readonly islandId: string
-  public onDisconnectObservable = new Observable<void>()
-  public onMessageObservable = new Observable<TransportMessage>()
+  public readonly events = mitt<MinimumTransport.Events>()
+
   private disconnected = false
   private room: Room
   private logger: ILogger
@@ -34,14 +35,14 @@ export class LivekitTransport {
   private token: string
   private statisticsCollector: StatisticsCollector
 
-  constructor({ logger, url, token, peerId, islandId, verbose }: LivekitConfig) {
+  constructor({ logger, url, token, peerId, islandId, verbose, statisticsCollector }: LivekitConfig) {
     this.logger = logger
     this.url = url
     this.token = token
     this.room = new Room()
     this.peerId = peerId
     this.islandId = islandId
-    this.statisticsCollector = new StatisticsCollector()
+    this.statisticsCollector = statisticsCollector
 
     this.room
       .on(RoomEvent.TrackSubscribed, (_: RemoteTrack, __: RemoteTrackPublication, ___: RemoteParticipant) => {
@@ -69,18 +70,6 @@ export class LivekitTransport {
       })
   }
 
-  startStatistics() {
-    this.statisticsCollector.start()
-  }
-
-  stopStatistics() {
-    this.statisticsCollector.stop()
-  }
-
-  collectStatistics() {
-    return this.statisticsCollector.collectStatistics()
-  }
-
   onPeerPositionChange(_: string, __: Position3D) {}
 
   async connect(): Promise<void> {
@@ -88,7 +77,7 @@ export class LivekitTransport {
     this.logger.log(`Connected to livekit room ${this.room.name}`)
   }
 
-  send(data: Uint8Array, { reliable }: SendOpts): Promise<void> {
+  send(data: Uint8Array, { reliable }: MinimumTransport.SendOpts): Promise<void> {
     this.statisticsCollector.onBytesSent(data.length)
     return this.room.localParticipant.publishData(data, reliable ? DataPacket_Kind.RELIABLE : DataPacket_Kind.LOSSY)
   }
@@ -100,14 +89,14 @@ export class LivekitTransport {
 
     this.disconnected = true
     this.room.disconnect()
-    this.onDisconnectObservable.notifyObservers()
+    this.events.emit('DISCONNECTION', { kicked: false })
   }
 
-  handleMessage(peerId: string, data: Uint8Array) {
+  handleMessage(address: string, data: Uint8Array) {
     this.statisticsCollector.onBytesRecv(data.length)
-    this.onMessageObservable.notifyObservers({
-      peer: peerId,
-      payload: data
+    this.events.emit('message', {
+      address,
+      data
     })
   }
 }

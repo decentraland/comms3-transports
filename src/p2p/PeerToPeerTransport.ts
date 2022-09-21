@@ -1,20 +1,11 @@
 import { Reader } from 'protobufjs/minimal'
-import { Observable } from 'mz-observable'
 import { future } from 'fp-future'
-
-import {
-  TransportStatistics,
-  TransportMessage,
-  BFFConnection,
-  TopicListener,
-  Position3D,
-  ILogger,
-  SendOpts
-} from '../types'
+import { BFFConnection, TopicListener, Position3D, ILogger, CommsV3Transport, MinimumTransport } from '../types'
 import { StatisticsCollector } from '../statistics'
 import { JoinIslandMessage, LeftIslandMessage } from '../proto/archipelago.gen'
 import { SuspendRelayData, PingData, PongData, Packet, MessageData } from '../proto/p2p.gen'
 import { Mesh } from './Mesh'
+import mitt from 'mitt'
 import { pickBy, randomUint32, discretizedPositionDistanceXZ } from './utils'
 import { PeerMessageType, PongMessageType, PingMessageType, PeerMessageTypes, SuspendRelayType } from './messageTypes'
 import {
@@ -40,6 +31,7 @@ export type P2PConfig = {
   logger: ILogger
   bff: BFFConnection
   logConfig: P2PLogConfig
+  statisticsCollector: StatisticsCollector
 }
 
 type PacketData = {
@@ -60,14 +52,14 @@ const DEFAULT_TARGET_CONNECTIONS = 4
 const DEFAULT_MAX_CONNECTIONS = 6
 const DEFAULT_MESSAGE_EXPIRATION_TIME = 10000
 
-export class P2PTransport {
+export class P2PTransport implements CommsV3Transport {
   public readonly name = 'p2p'
   public readonly peerId: string
   public readonly islandId: string
   public readonly mesh: Mesh
+  public readonly events = mitt<MinimumTransport.Events>()
   public logConfig: P2PLogConfig
-  public onDisconnectObservable = new Observable<void>()
-  public onMessageObservable = new Observable<TransportMessage>()
+  public knownPeers: Record<string, KnownPeerData> = {}
 
   private selfPosition: () => Position3D | undefined
   private relaySuspensionConfig?: RelaySuspensionConfig
@@ -76,7 +68,6 @@ export class P2PTransport {
   private bffConnection: BFFConnection
   private distance: (l1: Position3D, l2: Position3D) => number
   private peerRelayData: Record<string, PeerRelayData> = {}
-  private knownPeers: Record<string, KnownPeerData> = {}
   private receivedPackets: Record<string, { timestamp: number; expirationTime: number }> = {}
   private updatingNetwork: boolean = false
   private currentMessageId: number = 0
@@ -97,7 +88,7 @@ export class P2PTransport {
     this.peerId = config.peerId
     this.islandId = config.islandId
     this.bffConnection = config.bff
-    this.statisticsCollector = new StatisticsCollector()
+    this.statisticsCollector = config.statisticsCollector
     this.relaySuspensionConfig = config.relaySuspensionConfig
     this.selfPosition = config.selfPosition
     this.logConfig = config.logConfig
@@ -175,30 +166,6 @@ export class P2PTransport {
     })
   }
 
-  startStatistics() {
-    this.statisticsCollector.start()
-  }
-
-  stopStatistics() {
-    this.statisticsCollector.stop()
-  }
-
-  collectStatistics(): TransportStatistics | undefined {
-    const s = this.statisticsCollector.collectStatistics()
-    if (s) {
-      let knownPeers = 0
-      Object.keys(this.knownPeers).forEach((_) => {
-        knownPeers++
-      })
-
-      s.custom = {
-        knownPeers
-      }
-    }
-
-    return s
-  }
-
   onPeerPositionChange(peerId: string, p: Position3D) {
     const peer = this.knownPeers[peerId]
     if (peer) {
@@ -245,6 +212,7 @@ export class P2PTransport {
       this.logger.log(`peer ${peerId} left ${this.islandId}`)
       this.disconnectFrom(peerId)
       delete this.knownPeers[peerId]
+      this.events.emit('PEER_DISCONNECTED', { address: peerId })
       this.triggerUpdateNetwork(`peer ${peerId} left island`)
     } else {
       this.logger.warn(`peer ${peerId} left ${peerLeftMessage.islandId}, but our current island is ${this.islandId}`)
@@ -284,10 +252,10 @@ export class P2PTransport {
 
     this.knownPeers = {}
     await this.mesh.dispose()
-    this.onDisconnectObservable.notifyObservers()
+    this.events.emit('DISCONNECTION', { kicked: false })
   }
 
-  async send(payload: Uint8Array, { reliable }: SendOpts): Promise<void> {
+  async send(payload: Uint8Array, { reliable }: MinimumTransport.SendOpts): Promise<void> {
     if (this.disposed) {
       return
     }
@@ -390,9 +358,9 @@ export class P2PTransport {
       case 'messageData': {
         const { messageData } = packet.data
         if (messageData.room === this.islandId) {
-          this.onMessageObservable.notifyObservers({
-            peer: packet.src,
-            payload: messageData.payload
+          this.events.emit('message', {
+            address: packet.src,
+            data: messageData.payload
           })
         }
         break

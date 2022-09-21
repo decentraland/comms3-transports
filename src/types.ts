@@ -1,4 +1,4 @@
-import { Observable } from 'mz-observable'
+import { Emitter } from 'mitt'
 
 /**
  * Transport Enum
@@ -7,42 +7,81 @@ import { Observable } from 'mz-observable'
 export type TransportName = 'livekit' | 'ws' | 'p2p' | 'dummy'
 
 /**
+ * Minimum transport interface
+ * @public
+ */
+export type MinimumTransport = {
+  events: Emitter<MinimumTransport.Events>
+  send(data: Uint8Array, hints: MinimumTransport.SendOpts): void
+  disconnect(): Promise<void>
+  connect(): Promise<void>
+}
+
+/**
+ * @public
+ */
+export namespace MinimumTransport {
+  export type DisconnectionEvent = {
+    /**
+     * Whether or no the disconnection was caused due to a
+     * kick.
+     */
+    kicked: boolean
+
+    /**
+     * This field signals if the disconnection was caused by an error and thus
+     * a reconnection should be retried or notified to the user
+     */
+    error?: Error
+  }
+
+  export type PeerDisconnectedEvent = {
+    /**
+     * The address of the peer that was disconnected.
+     */
+    address: string
+  }
+
+  export type MessageEvent = {
+    data: Uint8Array
+    /**
+     * Sender address
+     */
+    address: string
+  }
+
+  export type Events = {
+    PEER_DISCONNECTED: PeerDisconnectedEvent
+    DISCONNECTION: DisconnectionEvent
+    message: MessageEvent
+  }
+
+  /**
+   * Send options
+   * @public
+   */
+  export type SendOpts = {
+    reliable?: boolean
+  }
+}
+
+/**
  * Transport
  * @public
  */
-export type Transport = {
-  onDisconnectObservable: Observable<void>
-  onMessageObservable: Observable<TransportMessage>
+export type CommsV3Transport = MinimumTransport & {
   name: TransportName
-  peerId: string
-  islandId: string
 
-  startStatistics(): void
-  collectStatistics(): TransportStatistics | undefined
-  stopStatistics(): void
-
-  connect(): Promise<void>
-  send(msg: Uint8Array, opts: SendOpts): Promise<void>
-  disconnect(): Promise<void>
-
-  onPeerPositionChange(peerId: string, position: Position3D): void
+  // TODO: this method seems like a leaky abstraction
+  onPeerPositionChange(address: string, position: Position3D): void
 }
 
-/**
- * A message from a transport
- * @public
- */
-export type TransportMessage = {
-  payload: Uint8Array
-  peer: string
+export type CommsDisconnectionEvent = {
+  kicked: boolean
 }
 
-/**
- * Send options
- * @public
- */
-export type SendOpts = {
-  reliable: boolean
+export type CommsPeerDisconnectedEvent = {
+  address: string
 }
 
 /**

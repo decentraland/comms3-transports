@@ -10,7 +10,7 @@ registerWebRTCGlobals()
 patchLivekit()
 
 import { LivekitTransport } from '../../src/livekit/LivekitTransport'
-import { TransportMessage } from '../../src/Transport'
+import { StatisticsCollector } from '../../src/statistics'
 
 const LIVEKIT_URL = process.env.TEST_LIVEKIT_URL
 const LIVEKIT_API_KEY = process.env.TEST_LIVEKIT_API_KEY
@@ -31,7 +31,11 @@ describe('livekit', () => {
     const transport = new LivekitTransport({
       logger,
       url: LIVEKIT_URL,
-      token: token.toJwt()
+      token: token.toJwt(),
+      islandId,
+      peerId,
+      statisticsCollector: new StatisticsCollector,
+      verbose: true
     })
     return transport
   }
@@ -47,14 +51,14 @@ describe('livekit', () => {
       await t2.connect()
 
       const p1 = new Promise((resolve) => {
-        t1.onMessageObservable.add(({ peer, payload }: TransportMessage) => {
-          resolve([peer, decoder.decode(payload)])
+        t1.events.on('message', ({ data, address }) => {
+          resolve([address, decoder.decode(data)])
         })
       })
 
       const p2 = new Promise((resolve) => {
-        t2.onMessageObservable.add(({ peer, payload }: TransportMessage) => {
-          resolve([peer, decoder.decode(payload)])
+        t2.events.on('message', ({ data, address }) => {
+          resolve([address, decoder.decode(data)])
         })
       })
 
