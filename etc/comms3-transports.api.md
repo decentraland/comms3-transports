@@ -6,6 +6,7 @@
 
 import * as _m0 from 'protobufjs/minimal';
 import { Observable } from 'mz-observable';
+import { Room } from 'livekit-client';
 
 // Warning: (ae-forgotten-export) The symbol "IslandChangedMessage" needs to be exported by the entry point index.d.ts
 //
@@ -76,6 +77,7 @@ export type TransportsConfig = {
     peerId: string;
     livekit: {
         verbose?: boolean;
+        onRoomConnected?: (room: Room) => void;
     };
     p2p: {
         debugWebRtcEnabled?: boolean;
@@ -91,9 +93,9 @@ export type TransportsConfig = {
 
 // Warnings were encountered during analysis:
 //
-// src/index.ts:15:3 - (ae-forgotten-export) The symbol "ILogger" needs to be exported by the entry point index.d.ts
-// src/index.ts:16:3 - (ae-forgotten-export) The symbol "BFFConnection" needs to be exported by the entry point index.d.ts
-// src/index.ts:27:5 - (ae-forgotten-export) The symbol "RelaySuspensionConfig" needs to be exported by the entry point index.d.ts
+// src/index.ts:16:3 - (ae-forgotten-export) The symbol "ILogger" needs to be exported by the entry point index.d.ts
+// src/index.ts:17:3 - (ae-forgotten-export) The symbol "BFFConnection" needs to be exported by the entry point index.d.ts
+// src/index.ts:29:5 - (ae-forgotten-export) The symbol "RelaySuspensionConfig" needs to be exported by the entry point index.d.ts
 // src/types.ts:21:3 - (ae-forgotten-export) The symbol "TransportStatistics" needs to be exported by the entry point index.d.ts
 // src/types.ts:25:3 - (ae-forgotten-export) The symbol "SendOpts" needs to be exported by the entry point index.d.ts
 

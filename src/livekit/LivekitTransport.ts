@@ -19,14 +19,15 @@ export type LivekitConfig = {
   peerId: string
   islandId: string
   verbose: boolean
+  onRoomConnected?: (room: Room) => void
 }
-
 export class LivekitTransport {
   public readonly name = 'livekit'
   public readonly peerId: string
   public readonly islandId: string
   public onDisconnectObservable = new Observable<void>()
   public onMessageObservable = new Observable<TransportMessage>()
+  public onRoomConnected?: (room: Room) => void
   private disconnected = false
   private room: Room
   private logger: ILogger
@@ -34,7 +35,7 @@ export class LivekitTransport {
   private token: string
   private statisticsCollector: StatisticsCollector
 
-  constructor({ logger, url, token, peerId, islandId, verbose }: LivekitConfig) {
+  constructor({ logger, url, token, peerId, islandId, verbose, onRoomConnected }: LivekitConfig) {
     this.logger = logger
     this.url = url
     this.token = token
@@ -42,6 +43,7 @@ export class LivekitTransport {
     this.peerId = peerId
     this.islandId = islandId
     this.statisticsCollector = new StatisticsCollector()
+    this.onRoomConnected = onRoomConnected
 
     this.room
       .on(RoomEvent.TrackSubscribed, (_: RemoteTrack, __: RemoteTrackPublication, ___: RemoteParticipant) => {
@@ -86,6 +88,7 @@ export class LivekitTransport {
   async connect(): Promise<void> {
     await this.room.connect(this.url, this.token, { autoSubscribe: true })
     this.logger.log(`Connected to livekit room ${this.room.name}`)
+    if (this.onRoomConnected) this.onRoomConnected(this.room)
   }
 
   send(data: Uint8Array, { reliable }: SendOpts): Promise<void> {
